@@ -37,6 +37,8 @@ class CLSystem(torch.nn.Module):
         assert xs.shape==(S, T, state_dim), xs.shape
         return xs, ys, us
 
+    def forward(self, data):
+        return self.rollout(data)
 
 
 # from controllers.REN_controller import RENController

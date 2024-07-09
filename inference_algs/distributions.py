@@ -1,4 +1,4 @@
-import torch, sys, os, copy
+import torch, sys, os, time, copy
 from collections import OrderedDict
 from torch.func import stack_module_state, functional_call
 from pyro.distributions import Normal, Uniform
@@ -21,23 +21,122 @@ class GibbsPosterior():
         # misc
         logger=None, num_ensemble_models=1
     ):
-        # set attributes
         self.lambda_ = to_tensor(lambda_)
         self.loss_fn = loss_fn
         self.logger = WrapLogger(logger)
-        self.num_ensemble_models = num_ensemble_models
 
         # Controller params will be set during training and the resulting CL system is use for evaluation.
         self.generic_cl_system = CLSystem(sys, controller, random_seed=None)
 
-        # init ensemble models
-        self.ensemble_models = [CLSystem(sys, controller, random_seed=None) for _ in range(self.num_ensemble_models)]
-        self.ensemble_params, self.ensemble_buffers = stack_module_state(self.ensemble_models)
-        # Construct a "stateless" version of one of the models. It is "stateless" in
-        # the sense that the parameters are meta Tensors and do not have storage.
-        # self.ensemble_base_model = CLSystem(sys, controller, random_seed=None)
-        # self.ensemble_base_model = self.ensemble_base_model.to('meta')
+        # set prior
+        self._set_prior(prior_dict)
 
+        # init ensemble models
+        self.num_ensemble_models = num_ensemble_models
+        self.ensemble_models = [CLSystem(copy.deepcopy(sys), copy.deepcopy(controller), random_seed=None) for _ in range(self.num_ensemble_models)]
+        # Construct a "stateless" version of one of the models: parameters are meta Tensors and do not have storage.
+        self.ensemble_base_model = CLSystem(copy.deepcopy(sys), copy.deepcopy(controller), random_seed=None)
+        self.ensemble_base_model = self.ensemble_base_model.to('meta')
+
+    def _log_prob_likelihood(self, params, train_data):
+        """
+        Args:
+            params: of shape (param_batch_size, num_controller_params)
+        """
+        L = params.shape[0]
+        assert L == self.num_ensemble_models    # TODO
+        # set params to controllers
+        for ind in range(L):
+            self.ensemble_models[ind].controller.set_parameters_as_vector(
+                params[ind, :].reshape(1,-1)
+            )
+        # stack all ensemble models
+        ensemble_params, ensemble_buffers = stack_module_state(self.ensemble_models)
+        predictions_vmap = torch.vmap(self.ensemble_functional_model, in_dims=(0, 0, None))(ensemble_params, ensemble_buffers, train_data)
+        print(predictions_vmap.shape)
+
+        # for l_tmp in range(L):
+        #     # set params to controller
+        #     cl_system = self.generic_cl_system
+        #     cl_system.controller.set_parameters_as_vector(
+        #         params[l_tmp, :].reshape(1,-1)
+        #     )
+        #     # rollout
+        #     xs, _, us = cl_system.rollout(train_data)
+        #     # compute loss
+        #     loss_val_tmp = self.loss_fn.forward(xs, us)
+        #     if l_tmp==0:
+        #         loss_val = [loss_val_tmp]
+        #     else:
+        #         loss_val.append(loss_val_tmp)
+        # loss_val = torch.cat(loss_val)
+        # assert loss_val.shape[0]==L and loss_val.shape[1]==1
+        # return loss_val
+
+    def log_prob(self, params, train_data):
+        '''
+        params is of shape (L, -1)
+        '''
+        assert len(params.shape)<3
+        if len(params.shape)==1:
+            params = params.reshape(1, -1)
+        L = params.shape[0]
+        print('L', L)
+        t_now = time.time()
+        lpl = self._log_prob_likelihood(params, train_data)
+        lpl = lpl.reshape(L)
+        print('lpl time', time.time()-t_now)
+        t_now = time.time()
+        lpp = self._log_prob_prior(params)
+        lpp = lpp.reshape(L)
+        print('lpp time', time.time()-t_now)
+        assert not (lpl.grad_fn is None or lpp.grad_fn is None)
+        '''
+        # NOTE: Must return lpp -self.lambda_ * lpl.
+        # To have small prior effect, lamba must be large.
+        # This makes the loss too large => divided by lambda^2.
+        NOTE: To debug, remove the effect of the prior by returning -lpl
+        '''
+        # return - lpl
+        # return 1/self.lambda_ * lpp - lpl
+        return lpp - self.lambda_ * lpl
+
+    def sample_params_from_prior(self, shape):
+        # shape is torch.Size()
+        return self.prior.sample(shape)
+
+    def _log_prob_prior(self, params):
+        return self.prior.log_prob(params)
+
+    def _param_dist(self, name, dist):
+        assert type(name) == str
+        assert isinstance(dist, torch.distributions.Distribution)
+        if isinstance(dist.base_dist, Normal):
+            dist.base_dist.loc = dist.base_dist.loc.to(device)
+            dist.base_dist.scale = dist.base_dist.scale.to(device)
+        elif isinstance(dist.base_dist, Uniform):
+            dist.base_dist.low = dist.base_dist.low.to(device)
+            dist.base_dist.high = dist.base_dist.high.to(device)
+        if name in list(self._param_dists.keys()):
+            self.logger.info('[WARNING] name ' + name + 'was already in param dists')
+        # assert name not in list(self._param_dists.keys())
+        assert hasattr(dist, 'rsample')
+        self._param_dists[name] = dist
+
+        return dist
+
+    def parameter_shapes(self):
+        param_shapes_dict = OrderedDict()
+        for name, dist in self._param_dists.items():
+            param_shapes_dict[name] = dist.event_shape
+        return param_shapes_dict
+
+    def get_forward_cl_system(self, params):
+        cl_system = self.generic_cl_system
+        cl_system.controller.set_parameters_as_vector(params)
+        return cl_system
+
+    def _set_prior(self, prior_dict):
         self._params = OrderedDict()
         self._param_dists = OrderedDict()
         # ------- set prior -------
@@ -91,87 +190,9 @@ class GibbsPosterior():
 
         self.prior = CatDist(self._param_dists.values())
 
-    def _log_prob_likelihood(self, params, train_data):
-        # assert len(params.shape)<3
-        # if len(params.shape)==1:
-        #     params = params.reshape(1, -1)
-        L = params.shape[0]
 
-        for l_tmp in range(L):
-            # set params to controller
-            cl_system = self.generic_cl_system
-            cl_system.controller.set_parameters_as_vector(
-                params[l_tmp, :].reshape(1,-1)
-            )
-            # rollout
-            xs, _, us = cl_system.rollout(train_data)
-            # compute loss
-            loss_val_tmp = self.loss_fn.forward(xs, us)
-            if l_tmp==0:
-                loss_val = [loss_val_tmp]
-            else:
-                loss_val.append(loss_val_tmp)
-        loss_val = torch.cat(loss_val)
-        assert loss_val.shape[0]==L and loss_val.shape[1]==1
-        return loss_val
-
-    def log_prob(self, params, train_data):
-        '''
-        params is of shape (L, -1)
-        '''
-        assert len(params.shape)<3
-        if len(params.shape)==1:
-            params = params.reshape(1, -1)
-        L = params.shape[0]
-        lpl = self._log_prob_likelihood(params, train_data)
-        lpl = lpl.reshape(L)
-        lpp = self._log_prob_prior(params)
-        lpp = lpp.reshape(L)
-        assert not (lpl.grad_fn is None or lpp.grad_fn is None)
-        '''
-        # NOTE: Must return lpp -self.lambda_ * lpl.
-        # To have small prior effect, lamba must be large.
-        # This makes the loss too large => divided by lambda^2.
-        NOTE: To debug, remove the effect of the prior by returning -lpl
-        '''
-        # return - lpl
-        # return 1/self.lambda_ * lpp - lpl
-        return lpp - self.lambda_ * lpl
-
-    def sample_params_from_prior(self, shape):
-        # shape is torch.Size()
-        return self.prior.sample(shape)
-
-    def _log_prob_prior(self, params):
-        return self.prior.log_prob(params)
-
-    def _param_dist(self, name, dist):
-        assert type(name) == str
-        assert isinstance(dist, torch.distributions.Distribution)
-        if isinstance(dist.base_dist, Normal):
-            dist.base_dist.loc = dist.base_dist.loc.to(device)
-            dist.base_dist.scale = dist.base_dist.scale.to(device)
-        elif isinstance(dist.base_dist, Uniform):
-            dist.base_dist.low = dist.base_dist.low.to(device)
-            dist.base_dist.high = dist.base_dist.high.to(device)
-        if name in list(self._param_dists.keys()):
-            self.logger.info('[WARNING] name ' + name + 'was already in param dists')
-        # assert name not in list(self._param_dists.keys())
-        assert hasattr(dist, 'rsample')
-        self._param_dists[name] = dist
-
-        return dist
-
-    def parameter_shapes(self):
-        param_shapes_dict = OrderedDict()
-        for name, dist in self._param_dists.items():
-            param_shapes_dict[name] = dist.event_shape
-        return param_shapes_dict
-
-    def get_forward_cl_system(self, params):
-        cl_system = self.generic_cl_system
-        cl_system.controller.set_parameters_as_vector(params)
-        return cl_system
+    def ensemble_functional_model(self, params, buffers, x):
+        return functional_call(self.ensemble_base_model, (params, buffers), (x,))
 
 
 # -------------------------
@@ -184,24 +205,25 @@ class GibbsWrapperNF(Target):
     """
 
     def __init__(
-        self, target_dist, train_data, data_batch_size=None,
+        self, target_dist, train_dataloader,
         prop_scale=torch.tensor(6.0), prop_shift=torch.tensor(-3.0)
     ):
         """Constructor
 
         Args:
           target_dist: Distribution to be approximated
-          train_data: training data used to compute the Gibbs dist
-          data_batch_size: size of data subsample to use in computing log prob
+          train_dataloader: Data loader used to compute the Gibbs dist for training
           prop_scale: Scale for the uniform proposal
           prop_shift: Shift for the uniform proposal
         """
         super().__init__(prop_scale=prop_scale, prop_shift=prop_shift)
         self.target_dist = target_dist
-        self.train_data, self.data_batch_size = train_data, data_batch_size
+        self.train_data_iterator = iter(train_dataloader)
         self.max_log_prob = 0.0
-        if not self.data_batch_size is None:
-            raise NotImplementedError   # TODO: random seed must be fixed across REN controller, ...
+        # TODO: random seed must be fixed across REN controller, ...
+
+    def set_train_data(self, train_data):
+        self.train_data = train_data
 
     def log_prob(self, z):
         """
@@ -211,12 +233,14 @@ class GibbsWrapperNF(Target):
         Returns:
           log probability of the distribution for z
         """
-        # sample data batch
-        # if self.data_batch_size < self.train_data.shape[0]:
-        #     inds =
-        return self.target_dist.log_prob(params=z, train_data=self.train_data)
-
-
+        train_data = next(self.train_data_iterator)
+        print('train_data', train_data.shape)
+        print('z', z.shape)
+        t = time.time()
+        lp = self.target_dist.log_prob(params=z, train_data=train_data)
+        print('log prob time ', time.time()-t)
+        self.train_data = None  # next call requires setting a new training data
+        return lp
 
 
 # -------------------------
