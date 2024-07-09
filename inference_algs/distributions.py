@@ -35,8 +35,8 @@ class GibbsPosterior():
         self.ensemble_params, self.ensemble_buffers = stack_module_state(self.ensemble_models)
         # Construct a "stateless" version of one of the models. It is "stateless" in
         # the sense that the parameters are meta Tensors and do not have storage.
-        self.ensemble_base_model = CLSystem(sys, controller, random_seed=None)
-        self.ensemble_base_model = self.ensemble_base_model.to('meta')
+        # self.ensemble_base_model = CLSystem(sys, controller, random_seed=None)
+        # self.ensemble_base_model = self.ensemble_base_model.to('meta')
 
         self._params = OrderedDict()
         self._param_dists = OrderedDict()

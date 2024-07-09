@@ -45,7 +45,7 @@ def approx_upper_bound(
     normalized the posterior when computing it. If this value is saved,
     it can be provided to the function. otherwise, is recomputed.
     """
-    assert len(data.shape) == 3, 'data must be of shape (S, T, num_states)'
+    assert len(data.shape) == 3, 'data must be of shape (S, T, state_dim)'
     num_rollouts = data.shape[0]
     if approximated_Z is None:
         print('Approximating Z.')

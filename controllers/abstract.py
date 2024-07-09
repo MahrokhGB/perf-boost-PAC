@@ -21,8 +21,8 @@ class CLSystem(torch.nn.Module):
 
     def rollout(self, data):
         assert len(data.shape)==3
-        (S, T, num_states) = data.shape
-        assert num_states==self.sys.num_states
+        (S, T, state_dim) = data.shape
+        assert state_dim==self.sys.state_dim
 
         if self.sys.__class__.__name__=='SystemRobots':
             xs, ys, us= self.sys.rollout(
@@ -34,7 +34,7 @@ class CLSystem(torch.nn.Module):
                 controller=self.controller,
                 data=data
             )
-        assert xs.shape==(S, T, num_states), xs.shape
+        assert xs.shape==(S, T, state_dim), xs.shape
         return xs, ys, us
 
 
@@ -51,14 +51,14 @@ class CLSystem(torch.nn.Module):
 #         generic_controller = RENController(
 #             noiseless_forward=sys.noiseless_forward,
 #             output_amplification=output_amplification,
-#             num_states=sys.num_states, num_inputs=sys.num_inputs,
+#             state_dim=sys.state_dim, in_dim=sys.in_dim,
 #             n_xi=n_xi, l=l, x_init=sys.x_init, u_init=sys.u_init,
 #             train_method=train_method, initialization_std=initialization_std
 #         )
 #     elif controller_type=='Affine':
 #         generic_controller = AffineController(
-#             weight=torch.zeros(sys.num_inputs, sys.num_states, device=device, dtype=torch.float32),
-#             bias=torch.zeros(sys.num_inputs, 1, device=device, dtype=torch.float32)
+#             weight=torch.zeros(sys.in_dim, sys.state_dim, device=device, dtype=torch.float32),
+#             bias=torch.zeros(sys.in_dim, 1, device=device, dtype=torch.float32)
 #         )
 #     else:
 #         raise NotImplementedError
@@ -70,26 +70,26 @@ from collections import OrderedDict
 from assistive_functions import to_tensor
 class AffineController:
     def __init__(self, weight, bias=None):
-        # weight is a tensor of shape = (num_inputs, num_states)
+        # weight is a tensor of shape = (in_dim, state_dim)
         self.weight = to_tensor(weight)
         if len(self.weight.shape)==1:
             self.weight = self.weight.reshape(1, -1)
-        self.num_inputs, self.num_states = self.weight.shape
-        # bias is a tensor of shape=(num_inputs, 1)
+        self.in_dim, self.state_dim = self.weight.shape
+        # bias is a tensor of shape=(in_dim, 1)
         self.bias = torch.zeros((weight.shape[0], 1)) if bias is None else to_tensor(bias)
         if len(self.bias.shape)==1:
             self.bias = self.bias.reshape(-1, 1)
-        assert self.bias.shape==(self.num_inputs, 1)
+        assert self.bias.shape==(self.in_dim, 1)
 
 
     def forward(self, what):
-        # what must be of shape (batch_size, num_states, 1)
+        # what must be of shape (batch_size, state_dim, 1)
         what = to_tensor(what)
         if len(what.shape)==1:
             what = what.reshape(1, -1, 1)
         if len(what.shape)==2:
             what = what.reshape(1, *what.shape)
-        assert what.shape[1:]==torch.Size([self.num_states, self.num_inputs]), what.shape
+        assert what.shape[1:]==torch.Size([self.state_dim, self.in_dim]), what.shape
         return torch.matmul(self.weight, what)+self.bias
 
     def set_parameters_as_vector(self, vec):
