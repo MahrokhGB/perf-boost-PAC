@@ -7,6 +7,7 @@ print(BASE_DIR)
 sys.path.insert(1, BASE_DIR)
 
 from config import device
+from nf_assistive_functions import eval_norm_flow
 from arg_parser import argument_parser, print_args
 from plants import SystemRobots, RobotsDataset
 from plot_functions import *
@@ -22,7 +23,7 @@ from inference_algs.distributions import GibbsPosterior, GibbsWrapperNF
 
 # ----- SET UP LOGGER -----
 now = datetime.now().strftime("%m_%d_%H_%M_%S")
-save_path = os.path.join(BASE_DIR, 'experiments', 'minimal_example', 'saved_results')
+save_path = os.path.join(BASE_DIR, 'experiments', 'norm_flow', 'saved_results')
 save_folder = os.path.join(save_path, 'ren_controller_'+now)
 os.makedirs(save_folder)
 logging.basicConfig(filename=os.path.join(save_folder, 'log'), format='%(asctime)s %(message)s', filemode='w')
@@ -67,16 +68,6 @@ ctl_generic = PerfBoostController(
 ).to(device)
 num_params = sum([p.nelement() for p in ctl_generic.parameters()])
 logger.info('Controller has %i parameters.' % num_params)
-
-# TODO: sample from initial normflow
-# # plot closed-loop trajectories before training the controller
-# logger.info('Plotting closed-loop trajectories before training the controller...')
-# x_log, _, u_log = sys.rollout(ctl, plot_data)
-# filename = os.path.join(save_folder, 'CL_init.pdf')
-# plot_trajectories(
-#     x_log[0, :, :], # remove extra dim due to batching
-#     dataset.xbar, sys.n_agents, filename=filename, text="CL - before training", T=t_ext
-# )
 
 # ------------ 4. Loss ------------
 Q = torch.kron(torch.eye(args.n_agents), torch.eye(4)).to(device)   # TODO: move to args and print info
@@ -131,8 +122,8 @@ target = GibbsWrapperNF(
 )
 
 # ****** INIT NORMFLOWS ******
-num_flows = 16
-from_type = 'Planar'
+num_flows = 2
+from_type = 'Radial'
 
 flows = []
 for i in range(num_flows):
@@ -154,9 +145,21 @@ msg = '\n[INFO] Norm flows setup: num transformations: %i' % num_flows
 msg += ' -- flow type: ' + str(type(flows[0])) + ' -- base dist: ' + str(type(q0))
 logger.info(msg)
 
+# plot closed-loop trajectories by sampling controller from untrained nfm
+logger.info('Plotting closed-loop trajectories before training the normalizing flow model.')
+with torch.no_grad():
+    z, _ = nfm.sample(1)
+    ctl_generic.set_parameters_as_vector(z[0, :])
+    x_log, _, u_log = sys.rollout(ctl_generic, plot_data)
+filename = os.path.join(save_folder, 'CL_init.pdf')
+plot_trajectories(
+    x_log[0, :, :], # remove extra dim due to batching
+    dataset.xbar, sys.n_agents, filename=filename, text="CL - before training", T=t_ext
+)
+
 # ****** TRAIN NORMFLOWS ******
 # Train model
-max_iter = 1000
+max_iter = 2000
 num_samples_nf_train = 40
 num_samples_nf_eval = 100
 anneal_iter = 10000
@@ -177,9 +180,9 @@ with tqdm(range(max_iter)) as t:
     for it in t:
         optimizer.zero_grad()
         if annealing:
-            t_now = time.time()
+            # t_now = time.time()
             nf_loss = nfm.reverse_kld(num_samples_nf_train, beta=min([1., 0.01 + it / anneal_iter]))
-            print('reverse KLD time ', time.time()-t_now)
+            # print('reverse KLD time ', time.time()-t_now)
         else:
             nf_loss = nfm.reverse_kld(num_samples_nf_train)
         nf_loss.backward()
@@ -216,45 +219,39 @@ with tqdm(range(max_iter)) as t:
             plt.show()
 
 # TODO: sample from trained nfm
-# # ------ 7. evaluate the trained model ------
-# # evaluate on the train data
-# logger.info('\n[INFO] evaluating the trained controller on %i training rollouts.' % args.num_rollouts)
-# with torch.no_grad():
-#     x_log, _, u_log = sys.rollout(
-#         controller=ctl, data=train_data, train=False,
-#     )   # use the entire train data, not a batch
-#     # evaluate losses
-#     loss = original_loss_fn.forward(x_log, u_log)
-#     msg = 'Loss: %.4f' % (loss)
-# # count collisions
-# if args.col_av:
-#     num_col = original_loss_fn.count_collisions(x_log)
-#     msg += ' -- Number of collisions = %i' % num_col
-# logger.info(msg)
+# ------ 7. evaluate the trained model ------
+# evaluate on the train data
+logger.info('\n[INFO] evaluating the trained controller on %i training rollouts.' % args.num_rollouts)
+train_loss, train_num_col = eval_norm_flow(
+    nfm=nfm, sys=sys, ctl_generic=ctl_generic, data=train_data,
+    num_samples=num_samples_nf_eval, loss_fn=original_loss_fn, count_collisions=args.col_av
+)
+msg = 'Average loss: %.4f' % train_loss
+if args.col_av:
+    msg += ' -- Average number of collisions = %i' % train_num_col
+logger.info(msg)
 
-# # evaluate on the test data
-# logger.info('\n[INFO] evaluating the trained controller on %i test rollouts.' % test_data.shape[0])
-# with torch.no_grad():
-#     # simulate over horizon steps
-#     x_log, _, u_log = sys.rollout(
-#         controller=ctl, data=test_data, train=False,
-#     )
-#     # loss
-#     test_loss = original_loss_fn.forward(x_log, u_log).item()
-#     msg = "Loss: %.4f" % (test_loss)
-# # count collisions
-# if args.col_av:
-#     num_col = original_loss_fn.count_collisions(x_log)
-#     msg += ' -- Number of collisions = %i' % num_col
-# logger.info(msg)
+# evaluate on the test data
+logger.info('\n[INFO] evaluating the trained controller on %i test rollouts.' % test_data.shape[0])
+test_loss, test_num_col = eval_norm_flow(
+    nfm=nfm, sys=sys, ctl_generic=ctl_generic, data=test_data,
+    num_samples=num_samples_nf_eval, loss_fn=original_loss_fn, count_collisions=args.col_av
+)
+msg = 'Average loss: %.4f' % test_loss
+if args.col_av:
+    msg += ' -- Average number of collisions = %i' % test_num_col
+logger.info(msg)
 
-# # plot closed-loop trajectories using the trained controller
-# logger.info('Plotting closed-loop trajectories using the trained controller...')
-# x_log, _, u_log = sys.rollout(ctl, plot_data)
-# filename = os.path.join(save_folder, 'CL_trained.pdf')
-# plot_trajectories(
-#     x_log[0, :, :], # remove extra dim due to batching
-#     dataset.xbar, sys.n_agents, filename=filename, text="CL - trained controller", T=t_ext,
-#     obstacle_centers=original_loss_fn.obstacle_centers,
-#     obstacle_covs=original_loss_fn.obstacle_covs
-# )
+# plot closed-loop trajectories using the trained controller
+logger.info('Plotting closed-loop trajectories using the trained controller...')
+with torch.no_grad():
+    z, _ = nfm.sample(1)
+    ctl_generic.set_parameters_as_vector(z[0, :])
+    x_log, _, u_log = sys.rollout(ctl_generic, plot_data)
+filename = os.path.join(save_folder, 'CL_trained.pdf')
+plot_trajectories(
+    x_log[0, :, :], # remove extra dim due to batching
+    dataset.xbar, sys.n_agents, filename=filename, text="CL - trained controller", T=t_ext,
+    obstacle_centers=original_loss_fn.obstacle_centers,
+    obstacle_covs=original_loss_fn.obstacle_covs
+)

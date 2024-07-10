@@ -38,7 +38,8 @@ class CLSystem(torch.nn.Module):
         return xs, ys, us
 
     def forward(self, data):
-        return self.rollout(data)
+        xs, ys, us = self.rollout(data)
+        return (xs, us)
 
 
 # from controllers.REN_controller import RENController

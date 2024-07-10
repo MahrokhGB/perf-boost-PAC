@@ -1,4 +1,4 @@
-import torch, sys, os, time, copy
+import torch, sys, os, time, math, copy
 from collections import OrderedDict
 from torch.func import stack_module_state, functional_call
 from pyro.distributions import Normal, Uniform
@@ -35,8 +35,9 @@ class GibbsPosterior():
         self.num_ensemble_models = num_ensemble_models
         self.ensemble_models = [CLSystem(copy.deepcopy(sys), copy.deepcopy(controller), random_seed=None) for _ in range(self.num_ensemble_models)]
         # Construct a "stateless" version of one of the models: parameters are meta Tensors and do not have storage.
-        self.ensemble_base_model = CLSystem(copy.deepcopy(sys), copy.deepcopy(controller), random_seed=None)
-        self.ensemble_base_model = self.ensemble_base_model.to('meta')
+        self.ensemble_base_model = CLSystem(
+            copy.deepcopy(sys), copy.deepcopy(controller), random_seed=None
+        ).to('meta')
 
     def _log_prob_likelihood(self, params, train_data):
         """
@@ -44,34 +45,44 @@ class GibbsPosterior():
             params: of shape (param_batch_size, num_controller_params)
         """
         L = params.shape[0]
-        assert L == self.num_ensemble_models    # TODO
-        # set params to controllers
-        for ind in range(L):
-            self.ensemble_models[ind].controller.set_parameters_as_vector(
-                params[ind, :].reshape(1,-1)
-            )
-        # stack all ensemble models
-        ensemble_params, ensemble_buffers = stack_module_state(self.ensemble_models)
-        predictions_vmap = torch.vmap(self.ensemble_functional_model, in_dims=(0, 0, None))(ensemble_params, ensemble_buffers, train_data)
-        print(predictions_vmap.shape)
 
-        # for l_tmp in range(L):
-        #     # set params to controller
-        #     cl_system = self.generic_cl_system
-        #     cl_system.controller.set_parameters_as_vector(
-        #         params[l_tmp, :].reshape(1,-1)
-        #     )
-        #     # rollout
-        #     xs, _, us = cl_system.rollout(train_data)
-        #     # compute loss
-        #     loss_val_tmp = self.loss_fn.forward(xs, us)
-        #     if l_tmp==0:
-        #         loss_val = [loss_val_tmp]
-        #     else:
-        #         loss_val.append(loss_val_tmp)
-        # loss_val = torch.cat(loss_val)
-        # assert loss_val.shape[0]==L and loss_val.shape[1]==1
-        # return loss_val
+        param_ind = 0
+        loss_val = None
+        for _ in range(math.ceil(L/self.num_ensemble_models)):
+            model_ind = 0
+            # set params to controllers
+            for _ in range(self.num_ensemble_models):
+                if param_ind==L:
+                    break
+                self.ensemble_models[model_ind].controller.set_parameters_as_vector(
+                    params[param_ind, :].reshape(1,-1)
+                )
+                model_ind += 1
+                param_ind += 1
+            used_ensemble_models = self.ensemble_models[0:model_ind]
+
+            # stack all ensemble models
+            ensemble_params_mdl, ensemble_buffers_mdl = stack_module_state(used_ensemble_models)
+            # rollout
+            xs, us = torch.vmap(
+                self.ensemble_functional_model,
+                in_dims=(0, 0, None)
+            )(ensemble_params_mdl, ensemble_buffers_mdl, train_data)
+
+            # compute loss
+            # t_now=time.time()
+            for ind in range(xs.shape[0]):    # TODO
+                loss_val_tmp = self.loss_fn.forward(xs[ind, :, :, :], us[ind, :, :, :])
+                if loss_val is None:
+                    loss_val = [loss_val_tmp]
+                else:
+                    loss_val.append(loss_val_tmp)
+            # print('loss time ', time.time()-t_now)
+
+        loss_val = torch.cat(loss_val)
+        assert param_ind==L
+        assert loss_val.shape[0]==L and loss_val.shape[1]==1, loss_val.shape
+        return loss_val
 
     def log_prob(self, params, train_data):
         '''
@@ -81,15 +92,10 @@ class GibbsPosterior():
         if len(params.shape)==1:
             params = params.reshape(1, -1)
         L = params.shape[0]
-        print('L', L)
-        t_now = time.time()
         lpl = self._log_prob_likelihood(params, train_data)
         lpl = lpl.reshape(L)
-        print('lpl time', time.time()-t_now)
-        t_now = time.time()
         lpp = self._log_prob_prior(params)
         lpp = lpp.reshape(L)
-        print('lpp time', time.time()-t_now)
         assert not (lpl.grad_fn is None or lpp.grad_fn is None)
         '''
         # NOTE: Must return lpp -self.lambda_ * lpl.
@@ -218,12 +224,10 @@ class GibbsWrapperNF(Target):
         """
         super().__init__(prop_scale=prop_scale, prop_shift=prop_shift)
         self.target_dist = target_dist
-        self.train_data_iterator = iter(train_dataloader)
+        self.train_data_iterator = list(train_dataloader)
         self.max_log_prob = 0.0
+        self.data_batch_ind = 0
         # TODO: random seed must be fixed across REN controller, ...
-
-    def set_train_data(self, train_data):
-        self.train_data = train_data
 
     def log_prob(self, z):
         """
@@ -233,12 +237,11 @@ class GibbsWrapperNF(Target):
         Returns:
           log probability of the distribution for z
         """
-        train_data = next(self.train_data_iterator)
-        print('train_data', train_data.shape)
-        print('z', z.shape)
-        t = time.time()
+        train_data = self.train_data_iterator[self.data_batch_ind]
+        self.data_batch_ind = (self.data_batch_ind+1) % len(self.train_data_iterator)
+        # t = time.time()
         lp = self.target_dist.log_prob(params=z, train_data=train_data)
-        print('log prob time ', time.time()-t)
+        # print('log prob time ', time.time()-t)
         self.train_data = None  # next call requires setting a new training data
         return lp
 
