@@ -9,7 +9,7 @@ sys.path.insert(1, BASE_DIR)
 from config import device
 from nf_assistive_functions import eval_norm_flow
 from arg_parser import argument_parser, print_args
-from plants import SystemRobots, RobotsDataset
+from plants import RobotsSystem, RobotsDataset
 from plot_functions import *
 from controllers import PerfBoostController
 from loss_functions import RobotsLoss
@@ -40,8 +40,8 @@ torch.manual_seed(args.random_seed)
 # ------------ 1. Dataset ------------
 dataset = RobotsDataset(random_seed=args.random_seed, horizon=args.horizon, std_ini=args.std_init_plant, n_agents=2)
 # divide to train and test
-train_data = dataset.train_data_full[:args.num_rollouts, :, :].to(device)
-test_data = dataset.test_data.to(device)
+train_data, test_data = dataset.get_data(num_train_samples=args.num_rollouts, num_test_samples=500)
+train_data, test_data = train_data.to(device), test_data.to(device)
 # data for plots
 t_ext = args.horizon * 4
 plot_data = torch.zeros(1, t_ext, train_data.shape[-1], device=device)
@@ -53,7 +53,7 @@ train_dataloader = DataLoader(train_data, batch_size=args.batch_size, shuffle=Tr
 # ------------ 2. Plant ------------
 plant_input_init = None     # all zero
 plant_state_init = None     # same as xbar
-sys = SystemRobots(
+sys = RobotsSystem(
     xbar=dataset.xbar, x_init=plant_state_init,
     u_init=plant_input_init, linear_plant=args.linearize_plant, k=args.spring_const
 ).to(device)
@@ -163,7 +163,7 @@ max_iter = 2000
 num_samples_nf_train = 40
 num_samples_nf_eval = 100
 anneal_iter = 10000
-annealing = True
+annealing = False # NOTE
 show_iter = 20
 lr = 1e-2
 weight_decay = 1e-4

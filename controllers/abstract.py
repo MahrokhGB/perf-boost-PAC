@@ -24,7 +24,7 @@ class CLSystem(torch.nn.Module):
         (S, T, state_dim) = data.shape
         assert state_dim==self.sys.state_dim
 
-        if self.sys.__class__.__name__=='SystemRobots':
+        if self.sys.__class__.__name__=='RobotsSystem':
             xs, ys, us= self.sys.rollout(
                 controller=self.controller,
                 data=data, train=True

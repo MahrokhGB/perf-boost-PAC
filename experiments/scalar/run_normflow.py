@@ -1,61 +1,93 @@
-# Import required packages
-import numpy as np
+import sys, os, logging, torch, time
+from datetime import datetime
+from torch.utils.data import DataLoader
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+print(BASE_DIR)
+sys.path.insert(1, BASE_DIR)
+
+from config import device
+from nf_assistive_functions import eval_norm_flow
+from arg_parser import argument_parser, print_args
+from plants import LTISystem, LTIDataset
+from plot_functions import *
+from controllers import AffineController
+from loss_functions import LQLossFH
+from assistive_functions import WrapLogger
+
+import math
 from tqdm import tqdm
 import normflows as nf
-from control import dlqr
-from datetime import datetime
-from matplotlib import pyplot as plt
-import torch, math, logging, sys, os, pickle
-
-BASE_DIR = os.path.dirname(os.path.dirname(os.getcwd()))
-sys.path.append(BASE_DIR)
-from assistive_functions import *
-from loss_functions import LQLossFH
-from controllers.abstract import get_controller
-from plants.scalar.LTI_sys import LTI_system
 from inference_algs.distributions import GibbsPosterior, GibbsWrapperNF
-from experiments.scalar.scalar_assistive_functions import load_data
 
+import numpy as np #TODO: remove
+from control import dlqr
+import matplotlib.pyplot as plt
+import pickle
 
-# ****** GENERAL ******
-random_seed = 33
-random_state = np.random.RandomState(random_seed)
-# ----- save and log directory -----
-now = datetime.now().strftime("%m_%d_%H_%M")
+# ----- SET UP LOGGER -----
+now = datetime.now().strftime("%m_%d_%H_%M_%S")
 save_path = os.path.join(BASE_DIR, 'experiments', 'scalar', 'saved_results')
-save_folder = os.path.join(save_path, 'normflows_'+now)
+save_folder = os.path.join(save_path, 'ren_controller_'+now)
 os.makedirs(save_folder)
-# logger
 logging.basicConfig(filename=os.path.join(save_folder, 'log'), format='%(asctime)s %(message)s', filemode='w')
-logger = logging.getLogger('normflows')
+logger = logging.getLogger('ren_controller_')
 logger.setLevel(logging.DEBUG)
 logger = WrapLogger(logger)
 
+# # ----- parse and set experiment arguments ----- TODO
+# args = argument_parser()
+# msg = print_args(args)
+# logger.info(msg)
+# torch.manual_seed(args.random_seed)
+
 # ------ 1. load data ------
-T = 10
-S = 512
-epsilon = 0.2       # PAC holds with Pr >= 1-epsilon
-dist_type = 'N biased'
+horizon = 10
+batch_size = 8  # TODO: move to arg parser
+random_seed = 33
+num_rollouts = 512
+num_test_samples = 512
 prior_type_b = 'Gaussian_biased_wide' # 'Uniform' #'Gaussian_biased_wide'
-
-data_train, data_test, disturbance = load_data(
-    dist_type=dist_type, S=S, T=T, random_seed=random_seed,
-    S_test=None     # use a subset of available test data if not None
+state_dim = 1
+d_dist_v = 0.3*np.ones((state_dim, 1))
+disturbance = {
+    'type':'N biased',
+    'mean':0.3*np.ones(state_dim),
+    'cov':np.matmul(d_dist_v, np.transpose(d_dist_v))
+}
+dataset = LTIDataset(
+    random_seed=random_seed, horizon=horizon,
+    state_dim=state_dim, disturbance=disturbance
 )
-msg = '------------------ SCALAR EXP ------------------'
-msg += '\n[INFO] Dataset: T: %i' % T + ' -- num_rollouts: %i' % S
-msg += ' -- epsilon: %.1f' % epsilon + ' -- prior over bias: ' + prior_type_b
-logger.info(msg)
+# divide to train and test
+train_data, test_data = dataset.get_data(num_train_samples=num_rollouts, num_test_samples=num_test_samples)
+train_data, test_data = train_data.to(device), test_data.to(device)
 
-# ------ 2. define the plant ------
-sys = LTI_system(
+# batch the data
+train_dataloader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
+
+# ------------ 2. Plant ------------
+sys = LTISystem(
     A = torch.tensor([[0.8]]).to(device),  # num_states*num_states
     B = torch.tensor([[0.1]]).to(device),  # num_states*num_inputs
     C = torch.tensor([[0.3]]).to(device),  # num_outputs*num_states
     x_init = 2*torch.ones(1, 1).to(device),# num_states*1
 )
+# TODO: LTI system must extend nn.module to support .to(device)
 
-# ------ 3. define the loss ------
+msg = '------------------ SCALAR EXP ------------------'    #TODO: move to print arg parser
+msg += '\n[INFO] Dataset: horizon: %i' % horizon + ' -- num_rollouts: %i' % num_rollouts
+logger.info(msg)
+
+# ------------ 3. Controller ------------
+ctl_generic = AffineController(
+    weight=torch.zeros(sys.num_inputs, sys.num_states, device=device, dtype=torch.float32),
+    bias=torch.zeros(sys.num_inputs, 1, device=device, dtype=torch.float32)
+)
+num_params = sum([p.nelement() for p in ctl_generic.parameters()])
+logger.info('Controller has %i parameters.' % num_params)
+
+# ------------ 4. Loss ------------
 Q = 5*torch.eye(sys.num_states).to(device)
 R = 0.003*torch.eye(sys.num_inputs).to(device)
 # optimal loss bound
@@ -64,19 +96,10 @@ loss_bound = 1
 sat_bound = torch.matmul(torch.matmul(torch.transpose(sys.x_init, 0, 1), Q), sys.x_init)
 if loss_bound is not None:
     logger.info('[INFO] bounding the loss to ' + str(loss_bound))
-lq_loss_bounded = LQLossFH(Q, R, loss_bound, sat_bound)
-lq_loss_original = LQLossFH(Q, R, None, None)
+bounded_loss_fn = LQLossFH(Q, R, loss_bound, sat_bound)
+original_loss_fn = LQLossFH(Q, R, None, None)
 
-# ------ 4. Gibbs temperature ------
-gibbs_lambda_star = (8 * S * math.log(1/epsilon))**0.5        # lambda for Gibbs
-
-# ------ 5. controller ------
-# define a generic controller
-generic_controller = get_controller(
-    controller_type='Affine', sys=sys,
-)
-
-# ****** PRIOR ******
+# ------------ 5. Prior ------------
 # ------ prior on weight ------
 # center prior at the infinite horizon LQR solution
 K_lqr_ih, _, _ = dlqr(
@@ -103,26 +126,30 @@ elif prior_type_b == 'Gaussian_biased_wide':
         'bias_scale':1.5
     })
 
+# ------------ 6. NEW: Posterior ------------
+epsilon = 0.2       # PAC holds with Pr >= 1-epsilon
+gibbs_lambda_star = (8*num_rollouts*math.log(1/epsilon))**0.5   # lambda for Gibbs
+msg = ' -- epsilon: %.1f' % epsilon + ' -- prior over bias: ' + prior_type_b
+logger.info(msg)
 
-# ****** POSTERIOR ******
 # define target distribution
 gibbs_posteior = GibbsPosterior(
-    loss_fn=lq_loss_bounded, lambda_=gibbs_lambda_star, prior_dict=prior_dict,
+    loss_fn=bounded_loss_fn, lambda_=gibbs_lambda_star, prior_dict=prior_dict,
+    num_ensemble_models=40, #TODO
     # attributes of the CL system
-    controller=generic_controller, sys=sys,
+    controller=ctl_generic, sys=sys,
     # misc
     logger=logger,
 )
 
 # Wrap Gibbs distribution to be used in normflows
-data_batch_size = None #min(32, S)
 target = GibbsWrapperNF(
-    target_dist=gibbs_posteior, train_data=data_train, data_batch_size=data_batch_size,
+    target_dist=gibbs_posteior, train_dataloader=train_dataloader,
     prop_scale=torch.tensor(6.0), prop_shift=torch.tensor(-3.0)
 )
 
 # load gridded Gibbs distribution
-filename = dist_type.replace(" ", "_")+'_ours_'+prior_type_b+'_T'+str(T)+'_S'+str(S)+'_eps'+str(int(epsilon*10))+'.pkl'
+filename = disturbance['type'].replace(" ", "_")+'_ours_'+prior_type_b+'_T'+str(horizon)+'_S'+str(num_rollouts)+'_eps'+str(int(epsilon*10))+'.pkl'
 filehandler = open(os.path.join(save_path, filename), 'rb')
 res_dict = pickle.load(filehandler)
 filehandler.close()
