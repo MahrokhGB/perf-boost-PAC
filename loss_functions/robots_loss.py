@@ -85,24 +85,24 @@ class RobotsLoss(LQLossFH):
         if self.loss_bound is not None:
             loss_val = self.loss_bound * loss_val           # shape = (S, 1, 1)
         # average over the samples
-        loss_val = torch.sum(loss_val, 0)/xs.shape[0]       # shape = (1, 1)
+        loss_val = torch.sum(loss_val, 0)/x_batch.shape[0]       # shape = (1, 1)
         return loss_val
 
-    def f_loss_obst(self, x_batched):
+    def f_loss_obst(self, x_batch):
         """
         Obstacle avoidance loss.
 
         Args:
-            - x_batched: tensor of shape (S, T, state_dim, 1)
+            - x_batch: tensor of shape (S, T, state_dim, 1)
                 concatenated states of all agents on the third dimension.
 
         Return:
             - obstacle avoidance loss of shape (1, 1).
         """
-        qx = x_batched[:, :, 0::4, :]   # x of all agents. shape = (S, T, n_agents, 1)
-        qy = x_batched[:, :, 1::4, :]   # y of all agents. shape = (S, T, n_agents, 1)
-        # batched over all samples and all times of [x agent 1, y agent 1, ..., x agent n, y agent n]
-        q = torch.cat((qx,qy), dim=-1).view(x_batched.shape[0], x_batched.shape[1], 1,-1).squeeze(dim=2)    # shape = (S, T, 2*n_agents)
+        qx = x_batch[:, :, 0::4, :]   # x of all agents. shape = (S, T, n_agents, 1)
+        qy = x_batch[:, :, 1::4, :]   # y of all agents. shape = (S, T, n_agents, 1)
+        # batch over all samples and all times of [x agent 1, y agent 1, ..., x agent n, y agent n]
+        q = torch.cat((qx,qy), dim=-1).view(x_batch.shape[0], x_batch.shape[1], 1,-1).squeeze(dim=2)    # shape = (S, T, 2*n_agents)
         # sum up loss due to each obstacle #TODO
         for ind, (center, cov) in enumerate(zip(self.obstacle_centers, self.obstacle_covs)):
             if ind == 0:
@@ -118,7 +118,7 @@ class RobotsLoss(LQLossFH):
         Collision avoidance loss.
 
         Args:
-            - x_batched: tensor of shape (S, T, state_dim, 1)
+            - x_batch: tensor of shape (S, T, state_dim, 1)
                 concatenated states of all agents on the third dimension.
 
 
@@ -141,7 +141,7 @@ class RobotsLoss(LQLossFH):
         Count the number of collisions between agents.
 
         Args:
-            - x_batched: tensor of shape (S, T, state_dim, 1)
+            - x_batch: tensor of shape (S, T, state_dim, 1)
                 concatenated states of all agents on the third dimension.
 
         Return:
@@ -159,7 +159,7 @@ class RobotsLoss(LQLossFH):
         Squared distance between pairwise agents.
 
         Args:
-            - x_batched: tensor of shape (S, T, state_dim, 1)
+            - x_batch: tensor of shape (S, T, state_dim, 1)
                 concatenated states of all agents on the third dimension.
 
         Return:

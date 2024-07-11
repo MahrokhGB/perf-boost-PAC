@@ -12,7 +12,7 @@ from arg_parser import argument_parser, print_args
 from plants import RobotsSystem, RobotsDataset
 from plot_functions import *
 from controllers import PerfBoostController
-from loss_functions import RobotsLoss
+from loss_functions import RobotsLoss, RobotsLossMultiBatch
 from assistive_functions import WrapLogger
 
 # NEW
@@ -78,14 +78,14 @@ sat_bound += 0 if args.alpha_col is None else args.alpha_col
 sat_bound += 0 if args.alpha_obst is None else args.alpha_obst
 sat_bound = sat_bound/20
 logger.info('Loss saturates at: '+str(sat_bound))
-bounded_loss_fn = RobotsLoss(
+bounded_loss_fn = RobotsLossMultiBatch(
     Q=Q, alpha_u=args.alpha_u, xbar=dataset.xbar,
     loss_bound=loss_bound, sat_bound=sat_bound.to(device),
     alpha_col=args.alpha_col, alpha_obst=args.alpha_obst,
     min_dist=args.min_dist if args.col_av else None,
     n_agents=sys.n_agents if args.col_av else None,
 )
-original_loss_fn = RobotsLoss(
+original_loss_fn = RobotsLossMultiBatch(
     Q=Q, alpha_u=args.alpha_u, xbar=dataset.xbar,
     loss_bound=None, sat_bound=None,
     alpha_col=args.alpha_col, alpha_obst=args.alpha_obst,
@@ -156,6 +156,27 @@ plot_trajectories(
     x_log[0, :, :], # remove extra dim due to batching
     dataset.xbar, sys.n_agents, filename=filename, text="CL - before training", T=t_ext
 )
+# evaluate on the train data
+num_samples_nf_eval = 40 #TODO
+# logger.info('\n[INFO] evaluating the base distribution on %i training rollouts.' % args.num_rollouts)
+# train_loss, train_num_col = eval_norm_flow(
+#     nfm=q0, sys=sys, ctl_generic=ctl_generic, data=train_data,
+#     num_samples=num_samples_nf_eval, loss_fn=original_loss_fn, count_collisions=args.col_av
+# )
+# msg = 'Average loss: %.4f' % train_loss
+# if args.col_av:
+#     msg += ' -- Average number of collisions = %i' % train_num_col
+# logger.info(msg)
+# evaluate on the train data
+logger.info('\n[INFO] evaluating the initial flow on %i training rollouts.' % args.num_rollouts)
+train_loss, train_num_col = eval_norm_flow(
+    nfm=nfm, sys=sys, ctl_generic=ctl_generic, data=train_data,
+    num_samples=num_samples_nf_eval, loss_fn=original_loss_fn, count_collisions=args.col_av
+)
+msg = 'Average loss: %.4f' % train_loss
+if args.col_av:
+    msg += ' -- Average number of collisions = %i' % train_num_col
+logger.info(msg)
 
 # ****** TRAIN NORMFLOWS ******
 # Train model
@@ -221,7 +242,7 @@ with tqdm(range(max_iter)) as t:
 # TODO: sample from trained nfm
 # ------ 7. evaluate the trained model ------
 # evaluate on the train data
-logger.info('\n[INFO] evaluating the trained controller on %i training rollouts.' % args.num_rollouts)
+logger.info('\n[INFO] evaluating the trained flow on %i training rollouts.' % args.num_rollouts)
 train_loss, train_num_col = eval_norm_flow(
     nfm=nfm, sys=sys, ctl_generic=ctl_generic, data=train_data,
     num_samples=num_samples_nf_eval, loss_fn=original_loss_fn, count_collisions=args.col_av
@@ -232,7 +253,7 @@ if args.col_av:
 logger.info(msg)
 
 # evaluate on the test data
-logger.info('\n[INFO] evaluating the trained controller on %i test rollouts.' % test_data.shape[0])
+logger.info('\n[INFO] evaluating the trained flow on %i test rollouts.' % test_data.shape[0])
 test_loss, test_num_col = eval_norm_flow(
     nfm=nfm, sys=sys, ctl_generic=ctl_generic, data=test_data,
     num_samples=num_samples_nf_eval, loss_fn=original_loss_fn, count_collisions=args.col_av

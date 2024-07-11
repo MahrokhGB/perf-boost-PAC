@@ -8,6 +8,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(1, BASE_DIR)
 
 from config import device
+from loss_functions import RobotsLoss, RobotsLossMultiBatch
 from controllers.abstract import CLSystem, AffineController
 from assistive_functions import to_tensor, WrapLogger
 from controllers import PerfBoostController
@@ -71,15 +72,20 @@ class GibbsPosterior():
 
             # compute loss
             # t_now=time.time()
-            for ind in range(xs.shape[0]):    # TODO
-                loss_val_tmp = self.loss_fn.forward(xs[ind, :, :, :], us[ind, :, :, :])
-                if loss_val is None:
-                    loss_val = [loss_val_tmp]
-                else:
-                    loss_val.append(loss_val_tmp)
+            if isinstance(self.loss_fn, RobotsLoss):
+                for ind in range(xs.shape[0]):
+                    loss_val_tmp = self.loss_fn.forward(xs[ind, :, :, :], us[ind, :, :, :])
+                    if loss_val is None:
+                        loss_val = [loss_val_tmp]
+                    else:
+                        loss_val.append(loss_val_tmp)
+                loss_val = torch.cat(loss_val)
+            elif isinstance(self.loss_fn, RobotsLossMultiBatch):
+                loss_val = self.loss_fn.forward(xs, us)
+            else:
+                raise NotImplementedError
             # print('loss time ', time.time()-t_now)
 
-        loss_val = torch.cat(loss_val)
         assert param_ind==L
         assert loss_val.shape[0]==L and loss_val.shape[1]==1, loss_val.shape
         return loss_val

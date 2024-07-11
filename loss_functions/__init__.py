@@ -1,2 +1,4 @@
 from loss_functions.lq_loss import LQLossFH
 from loss_functions.robots_loss import RobotsLoss
+from loss_functions.lq_loss_multi_batch import LQLossFHMultiBatch
+from loss_functions.robots_loss_multi_batch import RobotsLossMultiBatch
