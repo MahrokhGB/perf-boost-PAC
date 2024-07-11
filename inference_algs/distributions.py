@@ -79,12 +79,16 @@ class GibbsPosterior():
                         loss_val = [loss_val_tmp]
                     else:
                         loss_val.append(loss_val_tmp)
-                loss_val = torch.cat(loss_val)
             elif isinstance(self.loss_fn, RobotsLossMultiBatch):
-                loss_val = self.loss_fn.forward(xs, us)
+                loss_val_tmp = self.loss_fn.forward(xs, us)
+                if loss_val is None:
+                    loss_val = [loss_val_tmp]
+                else:
+                    loss_val.append(loss_val_tmp)
             else:
                 raise NotImplementedError
             # print('loss time ', time.time()-t_now)
+        loss_val = torch.cat(loss_val)
 
         assert param_ind==L
         assert loss_val.shape[0]==L and loss_val.shape[1]==1, loss_val.shape

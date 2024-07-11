@@ -62,7 +62,7 @@ sys = RobotsSystem(
 ctl_generic = PerfBoostController(
     noiseless_forward=sys.noiseless_forward,
     input_init=sys.x_init, output_init=sys.u_init,
-    dim_internal=args.dim_internal, dim_nl=args.l,
+    dim_internal=args.dim_internal, dim_nl=args.dim_nl,
     initialization_std=args.cont_init_std,
     output_amplification=20,
 ).to(device)
@@ -122,7 +122,7 @@ target = GibbsWrapperNF(
 )
 
 # ****** INIT NORMFLOWS ******
-num_flows = 2
+num_flows = 16
 from_type = 'Radial'
 
 flows = []
@@ -158,20 +158,20 @@ plot_trajectories(
 )
 # evaluate on the train data
 num_samples_nf_eval = 40 #TODO
-# logger.info('\n[INFO] evaluating the base distribution on %i training rollouts.' % args.num_rollouts)
-# train_loss, train_num_col = eval_norm_flow(
-#     nfm=q0, sys=sys, ctl_generic=ctl_generic, data=train_data,
-#     num_samples=num_samples_nf_eval, loss_fn=original_loss_fn, count_collisions=args.col_av
-# )
-# msg = 'Average loss: %.4f' % train_loss
-# if args.col_av:
-#     msg += ' -- Average number of collisions = %i' % train_num_col
-# logger.info(msg)
+logger.info('\n[INFO] evaluating the base distribution on %i training rollouts.' % args.num_rollouts)
+train_loss, train_num_col = eval_norm_flow(
+    nfm=q0, sys=sys, ctl_generic=ctl_generic, data=train_data,
+    num_samples=num_samples_nf_eval, loss_fn=bounded_loss_fn, count_collisions=args.col_av
+)
+msg = 'Average loss: %.4f' % train_loss
+if args.col_av:
+    msg += ' -- Average number of collisions = %i' % train_num_col
+logger.info(msg)
 # evaluate on the train data
 logger.info('\n[INFO] evaluating the initial flow on %i training rollouts.' % args.num_rollouts)
 train_loss, train_num_col = eval_norm_flow(
     nfm=nfm, sys=sys, ctl_generic=ctl_generic, data=train_data,
-    num_samples=num_samples_nf_eval, loss_fn=original_loss_fn, count_collisions=args.col_av
+    num_samples=num_samples_nf_eval, loss_fn=bounded_loss_fn, count_collisions=args.col_av
 )
 msg = 'Average loss: %.4f' % train_loss
 if args.col_av:
@@ -245,7 +245,7 @@ with tqdm(range(max_iter)) as t:
 logger.info('\n[INFO] evaluating the trained flow on %i training rollouts.' % args.num_rollouts)
 train_loss, train_num_col = eval_norm_flow(
     nfm=nfm, sys=sys, ctl_generic=ctl_generic, data=train_data,
-    num_samples=num_samples_nf_eval, loss_fn=original_loss_fn, count_collisions=args.col_av
+    num_samples=num_samples_nf_eval, loss_fn=bounded_loss_fn, count_collisions=args.col_av
 )
 msg = 'Average loss: %.4f' % train_loss
 if args.col_av:
@@ -256,7 +256,7 @@ logger.info(msg)
 logger.info('\n[INFO] evaluating the trained flow on %i test rollouts.' % test_data.shape[0])
 test_loss, test_num_col = eval_norm_flow(
     nfm=nfm, sys=sys, ctl_generic=ctl_generic, data=test_data,
-    num_samples=num_samples_nf_eval, loss_fn=original_loss_fn, count_collisions=args.col_av
+    num_samples=num_samples_nf_eval, loss_fn=bounded_loss_fn, count_collisions=args.col_av
 )
 msg = 'Average loss: %.4f' % test_loss
 if args.col_av:
@@ -273,6 +273,6 @@ filename = os.path.join(save_folder, 'CL_trained.pdf')
 plot_trajectories(
     x_log[0, :, :], # remove extra dim due to batching
     dataset.xbar, sys.n_agents, filename=filename, text="CL - trained controller", T=t_ext,
-    obstacle_centers=original_loss_fn.obstacle_centers,
-    obstacle_covs=original_loss_fn.obstacle_covs
+    obstacle_centers=bounded_loss_fn.obstacle_centers,
+    obstacle_covs=bounded_loss_fn.obstacle_covs
 )
