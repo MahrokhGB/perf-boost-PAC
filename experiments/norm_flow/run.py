@@ -12,6 +12,7 @@ from arg_parser import argument_parser, print_args
 from plants import RobotsSystem, RobotsDataset
 from plot_functions import *
 from controllers import PerfBoostController
+from controllers.abstract import AffineController
 from loss_functions import RobotsLoss, RobotsLossMultiBatch
 from assistive_functions import WrapLogger
 
@@ -59,13 +60,17 @@ sys = RobotsSystem(
 ).to(device)
 
 # ------------ 3. Controller ------------
-ctl_generic = PerfBoostController(
-    noiseless_forward=sys.noiseless_forward,
-    input_init=sys.x_init, output_init=sys.u_init,
-    dim_internal=args.dim_internal, dim_nl=args.dim_nl,
-    initialization_std=args.cont_init_std,
-    output_amplification=20,
-).to(device)
+# ctl_generic = PerfBoostController(
+#     noiseless_forward=sys.noiseless_forward,
+#     input_init=sys.x_init, output_init=sys.u_init,
+#     dim_internal=args.dim_internal, dim_nl=args.dim_nl,
+#     initialization_std=args.cont_init_std,
+#     output_amplification=20,
+# ).to(device)
+ctl_generic = AffineController(
+    weight=torch.zeros(sys.in_dim, sys.state_dim, device=device, dtype=torch.float32),
+    bias=torch.zeros(sys.in_dim, 1, device=device, dtype=torch.float32)
+)
 num_params = sum([p.nelement() for p in ctl_generic.parameters()])
 logger.info('Controller has %i parameters.' % num_params)
 
@@ -94,17 +99,26 @@ original_loss_fn = RobotsLossMultiBatch(
 )
 
 # ------------ 5. NEW: Prior ------------
-prior_std = 7
-prior_dict = {'type':'Gaussian'}
-training_param_names = ['X', 'Y', 'B2', 'C2', 'D21', 'D22', 'D12']
-for name in training_param_names:
-    prior_dict[name+'_loc'] = 0
-    prior_dict[name+'_scale'] = prior_std
+if isinstance(ctl_generic, AffineController):
+    prior_dict = {
+        'type_w':'Gaussian',
+        'type_b':'Gaussian_biased',
+        'weight_loc':0, 'weight_scale':1,
+        'bias_loc':0, 'bias_scale':5,
+    }
+else:
+    prior_std = 7
+    prior_dict = {'type':'Gaussian'}
+    training_param_names = ['X', 'Y', 'B2', 'C2', 'D21', 'D22', 'D12']
+    for name in training_param_names:
+        prior_dict[name+'_loc'] = 0
+        prior_dict[name+'_scale'] = prior_std
 
 # ------------ 6. NEW: Posterior ------------
 epsilon = 0.1       # PAC holds with Pr >= 1-epsilon
 gibbs_lambda_star = (8*args.num_rollouts*math.log(1/epsilon))**0.5   # lambda for Gibbs
-
+logger.info('gibbs_lambda_star %f' % gibbs_lambda_star)
+# gibbs_lambda_star = 10000    # TODO
 # define target distribution
 gibbs_posteior = GibbsPosterior(
     loss_fn=bounded_loss_fn, lambda_=gibbs_lambda_star, prior_dict=prior_dict,
@@ -180,14 +194,14 @@ logger.info(msg)
 
 # ****** TRAIN NORMFLOWS ******
 # Train model
-max_iter = 2000
-num_samples_nf_train = 40
+max_iter = 1500
+num_samples_nf_train = 400
 num_samples_nf_eval = 100
-anneal_iter = 10000
-annealing = False # NOTE
+anneal_iter = 1000
+annealing = True # NOTE
 show_iter = 20
 lr = 1e-2
-weight_decay = 1e-4
+weight_decay = 0
 msg = '[INFO] Training setup: annealing: ' + str(annealing)
 msg += ' -- annealing iter: %i' % anneal_iter if annealing else ''
 msg += ' -- learning rate: %.6f' % lr + ' -- weight decay: %.6f' % weight_decay
@@ -195,7 +209,7 @@ logger.info(msg)
 
 nf_loss_hist = [None]*max_iter
 
-torch.autograd.set_detect_anomaly(True)
+# torch.autograd.set_detect_anomaly(True)
 optimizer = torch.optim.Adam(nfm.parameters(), lr=lr, weight_decay=weight_decay)
 with tqdm(range(max_iter)) as t:
     for it in t:

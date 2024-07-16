@@ -1,7 +1,7 @@
 import torch
 import normflows as nf
 
-def eval_norm_flow(nfm, sys, ctl_generic, data, num_samples, loss_fn, count_collisions):
+def eval_norm_flow(nfm, sys, ctl_generic, data, num_samples, loss_fn, count_collisions=True):
     with torch.no_grad():
         if isinstance(nfm, nf.NormalizingFlow):
             z, _ = nfm.sample(num_samples)
@@ -23,5 +23,4 @@ def eval_norm_flow(nfm, sys, ctl_generic, data, num_samples, loss_fn, count_coll
     if count_collisions:
         return sum(loss)/len(loss), sum(num_col)/len(num_col)
     else:
-        print(loss)
-        return sum(loss)/len(loss)
+        return sum(loss)/len(loss), 0

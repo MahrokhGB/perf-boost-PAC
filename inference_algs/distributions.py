@@ -8,7 +8,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(1, BASE_DIR)
 
 from config import device
-from loss_functions import RobotsLoss, RobotsLossMultiBatch
+from loss_functions import *
 from controllers.abstract import CLSystem, AffineController
 from assistive_functions import to_tensor, WrapLogger
 from controllers import PerfBoostController
@@ -72,14 +72,14 @@ class GibbsPosterior():
 
             # compute loss
             # t_now=time.time()
-            if isinstance(self.loss_fn, RobotsLoss):
+            if isinstance(self.loss_fn, RobotsLoss) or isinstance(self.loss_fn, LQLossFH):
                 for ind in range(xs.shape[0]):
                     loss_val_tmp = self.loss_fn.forward(xs[ind, :, :, :], us[ind, :, :, :])
                     if loss_val is None:
                         loss_val = [loss_val_tmp]
                     else:
                         loss_val.append(loss_val_tmp)
-            elif isinstance(self.loss_fn, RobotsLossMultiBatch):
+            elif isinstance(self.loss_fn, RobotsLossMultiBatch) or isinstance(self.loss_fn, LQLossFHMultiBatch):
                 loss_val_tmp = self.loss_fn.forward(xs, us)
                 if loss_val is None:
                     loss_val = [loss_val_tmp]
@@ -108,14 +108,12 @@ class GibbsPosterior():
         lpp = lpp.reshape(L)
         assert not (lpl.grad_fn is None or lpp.grad_fn is None)
         '''
-        # NOTE: Must return lpp -self.lambda_ * lpl.
-        # To have small prior effect, lamba must be large.
-        # This makes the loss too large => divided by lambda^2.
         NOTE: To debug, remove the effect of the prior by returning -lpl
         '''
         # return - lpl
-        # return 1/self.lambda_ * lpp - lpl
-        return lpp - self.lambda_ * lpl
+        # return lpp - self.lambda_ * lpl
+
+        return lpp + self.lambda_ * lpl
 
     def sample_params_from_prior(self, shape):
         # shape is torch.Size()

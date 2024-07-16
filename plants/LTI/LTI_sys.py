@@ -18,7 +18,7 @@ class LTISystem:
         assert self.x_init.shape == (self.state_dim, 1)
 
     # simulation
-    def rollout(self, controller, data: torch.Tensor):
+    def rollout(self, controller, data: torch.Tensor, train: bool):
         """
         rollout with state-feedback controller
 
@@ -44,4 +44,7 @@ class LTISystem:
                 (us, controller.forward(xs[:, t:t+1, :])),
                 1
             )
+        if not train:
+            xs, ys, us = xs.detach(), ys.detach(),us.detach()
+
         return xs, ys, us
