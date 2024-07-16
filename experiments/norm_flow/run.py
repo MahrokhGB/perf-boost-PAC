@@ -1,4 +1,4 @@
-import sys, os, logging, torch, time
+import sys, os, logging, torch
 from datetime import datetime
 from torch.utils.data import DataLoader
 
@@ -11,9 +11,8 @@ from nf_assistive_functions import eval_norm_flow
 from arg_parser import argument_parser, print_args
 from plants import RobotsSystem, RobotsDataset
 from plot_functions import *
-from controllers import PerfBoostController
-from controllers.abstract import AffineController
-from loss_functions import RobotsLoss, RobotsLossMultiBatch
+from controllers import PerfBoostController, AffineController
+from loss_functions import RobotsLossMultiBatch
 from assistive_functions import WrapLogger
 
 # NEW
@@ -21,6 +20,9 @@ import math
 from tqdm import tqdm
 import normflows as nf
 from inference_algs.distributions import GibbsPosterior, GibbsWrapperNF
+
+
+CONTROLLER_TYPE = 'Affine' #'PerfBoost'
 
 # ----- SET UP LOGGER -----
 now = datetime.now().strftime("%m_%d_%H_%M_%S")
@@ -60,19 +62,23 @@ sys = RobotsSystem(
 ).to(device)
 
 # ------------ 3. Controller ------------
-# ctl_generic = PerfBoostController(
-#     noiseless_forward=sys.noiseless_forward,
-#     input_init=sys.x_init, output_init=sys.u_init,
-#     dim_internal=args.dim_internal, dim_nl=args.dim_nl,
-#     initialization_std=args.cont_init_std,
-#     output_amplification=20,
-# ).to(device)
-ctl_generic = AffineController(
-    weight=torch.zeros(sys.in_dim, sys.state_dim, device=device, dtype=torch.float32),
-    bias=torch.zeros(sys.in_dim, 1, device=device, dtype=torch.float32)
-)
+if CONTROLLER_TYPE=='PerfBoost':
+    ctl_generic = PerfBoostController(
+        noiseless_forward=sys.noiseless_forward,
+        input_init=sys.x_init, output_init=sys.u_init,
+        dim_internal=args.dim_internal, dim_nl=args.dim_nl,
+        initialization_std=args.cont_init_std,
+        output_amplification=20,
+    ).to(device)
+elif CONTROLLER_TYPE=='Affine':
+    ctl_generic = AffineController(
+        weight=torch.zeros(sys.in_dim, sys.state_dim, device=device, dtype=torch.float32),
+        bias=torch.zeros(sys.in_dim, 1, device=device, dtype=torch.float32)
+    )
+else:
+    raise KeyError('[Err] CONTROLLER_TYPE must be PerfBoost or Affine.')
 num_params = sum([p.nelement() for p in ctl_generic.parameters()])
-logger.info('Controller has %i parameters.' % num_params)
+logger.info('[INFO] Controller is of type ' + CONTROLLER_TYPE + ' and has %i parameters.' % num_params)
 
 # ------------ 4. Loss ------------
 Q = torch.kron(torch.eye(args.n_agents), torch.eye(4)).to(device)   # TODO: move to args and print info
@@ -107,7 +113,7 @@ if isinstance(ctl_generic, AffineController):
         'bias_loc':0, 'bias_scale':5,
     }
 else:
-    prior_std = 7
+    prior_std = 70 #TODO: set too flat
     prior_dict = {'type':'Gaussian'}
     training_param_names = ['X', 'Y', 'B2', 'C2', 'D21', 'D22', 'D12']
     for name in training_param_names:
@@ -165,10 +171,10 @@ with torch.no_grad():
     z, _ = nfm.sample(1)
     ctl_generic.set_parameters_as_vector(z[0, :])
     x_log, _, u_log = sys.rollout(ctl_generic, plot_data)
-filename = os.path.join(save_folder, 'CL_init.pdf')
 plot_trajectories(
     x_log[0, :, :], # remove extra dim due to batching
-    dataset.xbar, sys.n_agents, filename=filename, text="CL - before training", T=t_ext
+    dataset.xbar, sys.n_agents, text="CL - before training", T=t_ext,
+    save_path=save_folder, filename='CL_init.pdf', obst=args.obst_av
 )
 # evaluate on the train data
 num_samples_nf_eval = 40 #TODO
@@ -197,7 +203,7 @@ logger.info(msg)
 max_iter = 1500
 num_samples_nf_train = 400
 num_samples_nf_eval = 100
-anneal_iter = 1000
+anneal_iter = int(max_iter/2)
 annealing = True # NOTE
 show_iter = 20
 lr = 1e-2
