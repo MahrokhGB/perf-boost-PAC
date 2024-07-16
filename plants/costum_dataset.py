@@ -2,7 +2,7 @@ import torch, os, pickle
 from torch.utils.data import Dataset
 
 from config import BASE_DIR
-
+from assistive_functions import to_tensor
 
 class CostumDataset(Dataset):
     '''
@@ -48,7 +48,9 @@ class CostumDataset(Dataset):
         test_data = self._generate_data(1024)
         # save
         filehandler = open(self.file_name, 'wb')
-        pickle.dump({'train_data_full': train_data_full, 'test_data': test_data}, filehandler)
+        pickle.dump({'train_data_full': train_data_full.detach().cpu(),
+                     'test_data': test_data.detach().cpu()},
+                    filehandler)
         filehandler.close()
 
     def _load_data(self):
@@ -63,6 +65,8 @@ class CostumDataset(Dataset):
         filehandler = open(self.file_name, 'rb')
         self._data = pickle.load(filehandler)
         filehandler.close()
+        # convert numpy to tensor
+        self._data = to_tensor(self._data)
 
     def __len__(self):
         return self._data['train_data_full'].shape[0]
