@@ -74,6 +74,6 @@ def print_args(args):
         raise NotImplementedError('[Err] Only Affine, NN, and PerfBoost controllers are implemented.')
 
     msg += '\n[INFO] Optimizer: lr: %.2e' % args.lr + ' -- weight_decay: %.4f' % args.weight_decay
-    msg += ' -- batch_size: %i' % args.batch_size + ', -- return best model for validation data among logged epochs:' + str(args.return_best)
+    msg += ' -- batch_size: %i' % args.batch_size + ', -- return_best (return best model for validation data among logged epochs): ' + str(args.return_best)
 
     return msg

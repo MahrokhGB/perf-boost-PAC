@@ -29,7 +29,8 @@ class WrapLogger():
 
 
 def sample_2d_dist(dist, num_samples):
-    assert isinstance(dist, np.ndarray)
+    if not isinstance(dist, np.ndarray):
+        dist = dist.detach().cpu().numpy()
     assert len(dist.shape)==2
 
     # Create a flat copy of the distribution

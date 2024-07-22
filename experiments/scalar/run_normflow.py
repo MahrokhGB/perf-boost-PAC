@@ -17,6 +17,7 @@ from utils.assistive_functions import WrapLogger, sample_2d_dist
 import math
 from tqdm import tqdm
 import normflows as nf
+from Gibbs2d_assistive_functions import *
 from inference_algs.distributions import GibbsPosterior, GibbsWrapperNF
 
 import numpy as np #TODO: remove
@@ -134,11 +135,11 @@ if isinstance(ctl_generic, AffineController):
         })
 elif isinstance(ctl_generic, NNController):
     prior_dict = {
-        'type':'Gaussian',
+        'type':'Gaussian', 'type_b':'Gaussian', 'type_w':'Gaussian',
         'weight_loc': 0, #theta_mid_grid,
-        'weight_scale':50, #1,
+        'weight_scale':10, #1,
         'bias_loc': 0, #-disturbance['mean'][0]/sys.B[0,0], #0,
-        'bias_scale':50, #1.5
+        'bias_scale':10, #1.5
         }
 elif isinstance(ctl_generic, PerfBoostController):
     prior_std = 7
@@ -151,7 +152,7 @@ elif isinstance(ctl_generic, PerfBoostController):
 # ------------ 6. NEW: Posterior ------------
 epsilon = 0.2       # PAC holds with Pr >= 1-epsilon
 gibbs_lambda_star = (8*args.num_rollouts*math.log(1/epsilon))**0.5   # lambda for Gibbs
-lambda_ = gibbs_lambda_star # NOTE
+lambda_ = 1000#gibbs_lambda_star # NOTE
 msg = ' -- epsilon: %.1f' % epsilon + ' -- prior over bias: ' + prior_type_b + ' -- lambda: %.1f' % lambda_
 logger.info(msg)
 
@@ -172,21 +173,40 @@ target = GibbsWrapperNF(
 )
 
 # load gridded Gibbs distribution
-if PLOT_DIST: #TODO: only used for Affine. for others, only bias_grid is used
-    filename = disturbance['type'].replace(" ", "_")+'_ours_'+prior_type_b+'_T'+str(args.horizon)+'_S'+str(args.num_rollouts)+'_eps'+str(int(epsilon*10))+'.pkl'
-    filehandler = open(os.path.join(save_path, filename), 'rb')
-    res_dict = pickle.load(filehandler)
-    filehandler.close()
-    theta_grid = np.array([k[0,0] for k in res_dict['theta_grid']])
-    bias_grid = np.array(res_dict['bias_grid'])
-    Z_posterior = np.reshape(
-        np.array(res_dict['posterior']),
-        (len(theta_grid), len(bias_grid))
+if PLOT_DIST:
+    # grid
+    weight_range = 4 if args.cont_type=='Affine' else 20
+    theta_grid, bias_grid = get_grid(prior_dict=prior_dict, n_grid=65, weight_range=weight_range)
+    theta_grid, bias_grid = theta_grid.to(device), bias_grid.to(device)
+    # compute loss over the grid
+    if not os.path.isfile(os.path.join(save_folder, 'loss_dict_S'+str(args.num_rollouts)+'.pt')):
+        logger.info('Computing loss by gridding.')
+        compute_loss_by_gridding(
+            theta_grid, bias_grid, sys, train_data=train_data, ctl_generic=ctl_generic,
+            loss_fn=bounded_loss_fn, save_folder=save_folder, test_data=test_data,
+        )
+    # load loss over the grid
+    filehandler = open(
+        os.path.join(save_folder, 'loss_dict_S'+str(train_data.shape[0])+'.pt'),
+        'rb'
     )
+    loss_dict = pickle.load(filehandler)
+    filehandler.close()
+    assert (loss_dict['theta_grid']==theta_grid).all() and (loss_dict['bias_grid']==bias_grid).all()
+    # compute posterior
+    post_dict = compute_posterior_by_gridding(
+        prior_dict=prior_dict, gibbs_lambda=gibbs_posteior.lambda_, loss_dict=loss_dict
+    )
+    # reshape posterior as matrix
+    Z_posterior = torch.stack(post_dict['posterior'], dim=0).reshape(
+        len(theta_grid), len(bias_grid)
+    ).detach().cpu().numpy()
     assert abs(sum(sum(Z_posterior))-1)<=1e-5
+    # convert to numpy for plotting
+    theta_grid, bias_grid = theta_grid.detach().cpu().numpy(), bias_grid.detach().cpu().numpy()
 
 # ****** INIT NORMFLOWS ******
-num_flows = 16
+num_flows = 1
 from_type = 'Planar'
 
 flows = []
@@ -221,10 +241,13 @@ if BASE_IS_PRIOR: # TODO: get prior from Gibbs
     msg += 'no min shift' if mean_shift==0 else 'mean shift of %.2f.' % mean_shift
     msg += ' and same scale.' if std_scale==1 else ' %.2f times larger scale.'%std_scale
     logger.info(msg)
-# else:   # NOTE
-#     state_dict = q0.state_dict()
-#     state_dict['log_scale'] = state_dict['log_scale']+torch.log(torch.Tensor([std_scale]))
-#     q0.load_state_dict(state_dict)
+else:   # NOTE
+    std_scale = 3
+    mean_shift = -3
+    state_dict = q0.state_dict()
+    state_dict['loc'] = state_dict['loc']+ torch.Tensor([mean_shift])
+    state_dict['log_scale'] = state_dict['log_scale']+torch.log(torch.Tensor([std_scale]))
+    q0.load_state_dict(state_dict)
 
 msg = '\n[INFO] Norm flows setup: num transformations: %i' % len(flows)
 msg += ' -- flow type: ' + str(type(flows[0])) + ' -- base dist: ' + str(type(q0))
@@ -247,21 +270,21 @@ if PLOT_DIST:
         ax.set_ylabel('weight')
 
     # plot target
-    if args.cont_type=='Affine':
-        z_ind = sample_2d_dist(dist=np.transpose(Z_posterior), num_samples=2 ** 20)
-        z_np = np.array([[bias_grid[z_ind[ind,0]], theta_grid[z_ind[ind,1]]] for ind in range(z_ind.shape[0])])
-        dist_axs[1,1].hist2d(
-            z_np[:, 0].flatten(), z_np[:, 1].flatten(),
-            bins=bins, range=hist_range
-        )
-        # dist_axs[1,1].pcolormesh(bias_grid, theta_grid, Z_posterior, shading='nearest')
-        dist_axs[1,1].set_title('target distribution')
+    z_ind = sample_2d_dist(dist=np.transpose(Z_posterior), num_samples=2 ** 20)
+    # z_np = [[bias_grid[z_ind[ind,0]], theta_grid[z_ind[ind,1]]] for ind in range(z_ind.shape[0])]
+    dist_axs[1,1].hist2d(
+        [bias_grid[z_ind[ind, 0]] for ind in range(z_ind.shape[0])],
+        [theta_grid[z_ind[ind, 1]] for ind in range(z_ind.shape[0])],
+        bins=bins, range=hist_range
+    )
+    # dist_axs[1,1].pcolormesh(bias_grid, theta_grid, Z_posterior, shading='nearest')
+    dist_axs[1,1].set_title('target distribution')
 
     # Plot initial flow distribution
     z, _ = nfm.sample(num_samples=2 ** 20)
-    z_np = z.to('cpu').data.numpy()
+    z = z.detach().cpu().numpy()
     dist_axs[0,1].hist2d(
-        z_np[:, 1].flatten(), z_np[:, 0].flatten(),
+        z[:, 1].flatten(), z[:, 0].flatten(),
         bins=bins, range=hist_range
     )
     dist_axs[0,1].set_title('initial flow distribution')
@@ -270,15 +293,12 @@ if PLOT_DIST:
     nfm_base = nf.NormalizingFlow(q0=q0, flows=[], p=target)
     nfm_base.to(device)
     z, _ = nfm_base.sample(num_samples=2 ** 20)
-    z_np = z.to('cpu').data.numpy()
+    z = z.to('cpu').data.numpy()
     dist_axs[0,0].hist2d(
-        z_np[:, 1].flatten(), z_np[:, 0].flatten(),
+        z[:, 1].flatten(), z[:, 0].flatten(),
         bins=bins, range=hist_range
     )
     dist_axs[0,0].set_title('initial base distribution')
-
-    dist_fig.savefig(os.path.join(save_folder, 'distributions.pdf'))
-    dist_fig.show()
 
 # evaluate on the train data
 num_samples_nf_eval = 40 #TODO
@@ -307,24 +327,23 @@ msg = '\n[INFO] Training setup: annealing: ' + str(annealing)
 msg += ' -- annealing iter: %i' % anneal_iter if annealing else ''
 logger.info(msg)
 
-loss_hist = np.array([])
+loss_hist = []
 loss_fig, loss_ax = plt.subplots(1,1,figsize=(10,10))
 loss_ax.set_xlabel('iteration')
-loss_ax.set_ylabel('norm flow loss ('+'' if annealing else 'not ' +'annealed)')
+loss_ax.set_ylabel('norm flow loss ('+'annealed)' if annealing else 'not annealed)')
 
 optimizer = torch.optim.Adam(nfm.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 with tqdm(range(args.epochs)) as t:
     for it in t:
         optimizer.zero_grad()
         if annealing:
-            nf_loss = nfm.reverse_kld(num_samples, beta=np.min([1., 0.01 + it / anneal_iter]))
+            nf_loss = nfm.reverse_kld(num_samples, beta=min([1., 0.01 + it / anneal_iter]))
         else:
             nf_loss = nfm.reverse_kld(num_samples)
         nf_loss.backward()
         optimizer.step()
 
-        loss_hist = np.append(loss_hist, nf_loss.to('cpu').data.numpy())
-
+        loss_hist = loss_hist + [nf_loss.to('cpu').data.numpy()]
         # Plot learned distribution
         if (it + 1) % args.log_epoch == 0 or it+1==args.epochs:
             # sample some controllers and eval
@@ -347,15 +366,15 @@ with tqdm(range(args.epochs)) as t:
             # plot
             if PLOT_DIST:
                 z, _ = nfm.sample(2**20)
-                z_np = z.to('cpu').data.numpy()
+                z = z.detach().cpu().numpy()
                 dist_axs[1,0].hist2d(
-                    z_np[:, 1].flatten(), z_np[:, 0].flatten(),
+                    z[:, 1].flatten(), z[:, 0].flatten(),
                     bins=bins, range=hist_range
                 )
-                dist_axs[1,0].scatter(z_np[:, 1].flatten(), z_np[:, 0].flatten())
+                dist_axs[1,0].scatter(z[:50, 1].flatten(), z[:50, 0].flatten(), s=1)
                 name = 'final' if it+1==args.epochs else 'at itr '+str(it+1)
                 dist_axs[1,0].set_title('flow distribution - '+name)
-                dist_fig.savefig(os.path.join(save_folder, 'distributions.pdf'))
+                dist_fig.savefig(os.path.join(save_folder, 'distributions_'+name+'.pdf'))
                 dist_fig.show()
 
             # plot loss
