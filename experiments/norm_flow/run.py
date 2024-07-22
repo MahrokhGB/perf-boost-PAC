@@ -22,14 +22,15 @@ import normflows as nf
 from inference_algs.distributions import GibbsPosterior, GibbsWrapperNF
 
 CONTROLLER_TYPE = 'Affine' #'PerfBoost'
+BASE_IS_PRIOR = True
 
 # ----- SET UP LOGGER -----
 now = datetime.now().strftime("%m_%d_%H_%M_%S")
 save_path = os.path.join(BASE_DIR, 'experiments', 'norm_flow', 'saved_results')
-save_folder = os.path.join(save_path, 'ren_controller_'+now)
+save_folder = os.path.join(save_path, 'nf_' + CONTROLLER_TYPE + '_' + now)
 os.makedirs(save_folder)
 logging.basicConfig(filename=os.path.join(save_folder, 'log'), format='%(asctime)s %(message)s', filemode='w')
-logger = logging.getLogger('ren_controller_')
+logger = logging.getLogger('nf')
 logger.setLevel(logging.DEBUG)
 logger = WrapLogger(logger)
 
@@ -155,6 +156,16 @@ for i in range(num_flows):
 
 # base distribution
 q0 = nf.distributions.DiagGaussian(num_params)
+# base distribution same as the prior
+if BASE_IS_PRIOR:
+    state_dict = q0.state_dict()
+    state_dict['loc'] = torch.tensor(
+        [prior_dict['weight_loc'], prior_dict['bias_loc']]
+    ).reshape(1, -1)
+    state_dict['log_scale'] = torch.log(torch.tensor(
+        [prior_dict['weight_scale'], prior_dict['bias_scale']]
+    )).reshape(1, -1)
+    q0.load_state_dict(state_dict)
 
 # set up normflow
 nfm = nf.NormalizingFlow(q0=q0, flows=flows, p=target)
@@ -293,7 +304,8 @@ with torch.no_grad():
 filename = os.path.join(save_folder, 'CL_trained.pdf')
 plot_trajectories(
     x_log[0, :, :], # remove extra dim due to batching
-    dataset.xbar, sys.n_agents, filename=filename, text="CL - trained controller", T=t_ext,
+    dataset.xbar, sys.n_agents, text="CL - trained controller", T=t_ext,
+    filename='CL_trained.pdf', save_folder=save_folder,
     obstacle_centers=bounded_loss_fn.obstacle_centers,
     obstacle_covs=bounded_loss_fn.obstacle_covs
 )
