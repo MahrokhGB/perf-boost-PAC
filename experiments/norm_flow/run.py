@@ -10,17 +10,16 @@ from config import device
 from nf_assistive_functions import eval_norm_flow
 from arg_parser import argument_parser, print_args
 from plants import RobotsSystem, RobotsDataset
-from plot_functions import *
+from utils.plot_functions import *
 from controllers import PerfBoostController, AffineController
 from loss_functions import RobotsLossMultiBatch
-from assistive_functions import WrapLogger
+from utils.assistive_functions import WrapLogger
 
 # NEW
 import math
 from tqdm import tqdm
 import normflows as nf
 from inference_algs.distributions import GibbsPosterior, GibbsWrapperNF
-
 
 CONTROLLER_TYPE = 'Affine' #'PerfBoost'
 
@@ -174,7 +173,9 @@ with torch.no_grad():
 plot_trajectories(
     x_log[0, :, :], # remove extra dim due to batching
     dataset.xbar, sys.n_agents, text="CL - before training", T=t_ext,
-    save_path=save_folder, filename='CL_init.pdf', obst=args.obst_av
+    save_folder=save_folder, filename='CL_init.pdf',
+    obstacle_centers=bounded_loss_fn.obstacle_centers,
+    obstacle_covs=bounded_loss_fn.obstacle_covs
 )
 # evaluate on the train data
 num_samples_nf_eval = 40 #TODO
@@ -204,7 +205,7 @@ max_iter = 1500
 num_samples_nf_train = 400
 num_samples_nf_eval = 100
 anneal_iter = int(max_iter/2)
-annealing = True # NOTE
+annealing = False # NOTE
 show_iter = 20
 lr = 1e-2
 weight_decay = 0

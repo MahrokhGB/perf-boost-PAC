@@ -163,3 +163,4 @@ cython_debug/
 
 experiments/*/saved_results/
 *.pkl
+.DS_Store

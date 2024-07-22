@@ -9,8 +9,8 @@ sys.path.insert(1, BASE_DIR)
 
 from config import device
 from loss_functions import *
-from controllers.abstract import CLSystem, AffineController
-from assistive_functions import to_tensor, WrapLogger
+from controllers.abstract import CLSystem, NNController, AffineController
+from utils.assistive_functions import to_tensor, WrapLogger
 from controllers import PerfBoostController
 
 class GibbsPosterior():
@@ -111,9 +111,7 @@ class GibbsPosterior():
         NOTE: To debug, remove the effect of the prior by returning -lpl
         '''
         # return - lpl
-        # return lpp - self.lambda_ * lpl
-
-        return lpp + self.lambda_ * lpl
+        return lpp - self.lambda_ * lpl
 
     def sample_params_from_prior(self, shape):
         # shape is torch.Size()
@@ -174,6 +172,54 @@ class GibbsPosterior():
 
                 # set dist
                 self._param_dist(name, dist.to_event(1))
+        # set prior for NN controller
+        if isinstance(self.generic_cl_system.controller, NNController):
+            # check if prior is provided
+            for name in ['weight', 'bias']:
+                if not name+'_loc' in prior_dict.keys():
+                    if prior_dict['type'] == 'Gaussian':
+                        self.logger.info('[WARNING]: prior loc for ' + name + ' was not provided. Replaced by 0.')
+                        prior_dict[name+'_loc'] = 0
+                    else:
+                        raise NotImplementedError
+                if not name+'_scale' in prior_dict.keys():
+                    if prior_dict['type'] == 'Gaussian':
+                        self.logger.info('[WARNING]: prior scale for ' + name + ' was not provided. Replaced by 1.')
+                        prior_dict[name+'_scale'] = 1
+                    else:
+                        raise NotImplementedError
+            # set prior for hidden layers
+            for i in range(1, self.generic_cl_system.controller.n_layers + 1):
+                # Gaussian prior
+                for name in ['weight', 'bias']:
+                    param = getattr(
+                        getattr(self.generic_cl_system.controller, 'fc_%i'%(i)),
+                        name
+                    )
+                    if prior_dict['type'] == 'Gaussian':
+                        dist = Normal(
+                            loc=prior_dict.get(name+'_loc', 0)*torch.ones(param.nelement(), device=device),
+                            scale=prior_dict.get(name+'_scale', 1)*torch.ones(param.nelement(), device=device)
+                        )
+                    else:
+                        raise NotImplementedError
+                    # set dist
+                    self._param_dist('fc_%i'%(i)+'.'+name, dist.to_event(1))
+            # set prior for output layers
+            for name in ['weight', 'bias']:
+                param = getattr(
+                    getattr(self.generic_cl_system.controller, 'out'),
+                    name
+                )
+                if prior_dict['type'] == 'Gaussian':
+                    dist = Normal(
+                        loc=prior_dict.get(name+'_loc', 0)*torch.ones(param.nelement(), device=device),
+                        scale=prior_dict.get(name+'_scale', 1)*torch.ones(param.nelement(), device=device)
+                    )
+                else:
+                    raise NotImplementedError
+                # set dist
+                self._param_dist('out.'+name, dist.to_event(1))
         elif isinstance(self.generic_cl_system.controller, AffineController):
             for name, shape in self.generic_cl_system.controller.parameter_shapes().items():
                 # Gaussian prior
@@ -199,8 +245,9 @@ class GibbsPosterior():
             raise NotImplementedError
 
         # check that parameters in prior and controller are aligned
-        for param_name_cont, param_name_prior in zip(self.generic_cl_system.controller.get_named_parameters().keys(), self._param_dists.keys()):
-            assert param_name_cont == param_name_prior, param_name_cont + 'in controller did not match ' + param_name_prior + ' in prior'
+        if not isinstance(self.generic_cl_system.controller, NNController):
+            for param_name_cont, param_name_prior in zip(self.generic_cl_system.controller.get_named_parameters().keys(), self._param_dists.keys()):
+                assert param_name_cont == param_name_prior, param_name_cont + 'in controller did not match ' + param_name_prior + ' in prior'
 
         self.prior = CatDist(self._param_dists.values())
 
@@ -295,6 +342,18 @@ class CatDist(Distribution):
         if self.reduce_event_dim:
             return torch.sum(torch.stack(log_probs, dim=0), dim=0)
         return torch.stack(log_probs, dim=0)
+
+    def mean(self):
+        means = []
+        for dist in self.dists:
+            means.append(dist.mean.flatten())
+        return torch.cat(means, dim=0)
+
+    def stddev(self):
+        stddevs = []
+        for dist in self.dists:
+            stddevs.append(dist.stddev.flatten())
+        return torch.cat(stddevs, dim=0)
 
     def _sample(self, sample_shape, sample_fn='sample'):
         return torch.cat([getattr(d, sample_fn)(sample_shape).to(device) for d in self.dists], dim=-1)

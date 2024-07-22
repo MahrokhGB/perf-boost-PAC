@@ -65,7 +65,7 @@ class CLSystem(torch.nn.Module):
 
 # ---------- CONTROLLER ----------
 from collections import OrderedDict
-from assistive_functions import to_tensor
+from utils.assistive_functions import to_tensor
 class AffineController(torch.nn.Module):
     def __init__(self, weight, bias=None):
         super().__init__()
@@ -86,14 +86,14 @@ class AffineController(torch.nn.Module):
             self.register_buffer('bias', torch.zeros((weight.shape[0], 1)))
 
         # check dimensions
-        self.in_dim, self.state_dim = self.weight.shape
-        assert self.bias.shape==(self.in_dim, 1)
+        self.out_dim, self.in_dim = self.weight.shape
+        assert self.bias.shape==(self.out_dim, 1)
 
 
     def forward(self, what):
         # what must be of shape (batch_size, state_dim, self.in_dim)
         # assert what.shape[1:]==torch.Size([self.state_dim, self.in_dim]), what.shape
-        if what.shape[-1]==self.state_dim:
+        if what.shape[-1]==self.in_dim:
             what = what.transpose(-1,-2)
         return torch.matmul(self.weight, what)+self.bias
 
@@ -123,3 +123,144 @@ class AffineController(torch.nn.Module):
             (name, getattr(self, name)) for name in ['weight', 'bias']
         )
         return param_dict
+
+
+
+class NNController(torch.nn.Module):
+    def __init__(self, in_dim, out_dim, layer_sizes, nonlinearity_hidden=torch.tanh, nonlinearity_output=None):
+        super(NNController, self).__init__()
+
+        self.in_dim, self.out_dim = in_dim, out_dim
+        self.nonlinearity_hidden, self.nonlinearity_output = nonlinearity_hidden, nonlinearity_output
+
+        self.n_layers = len(layer_sizes)
+        self.layers = []
+        prev_size = in_dim
+        for i, size in enumerate(layer_sizes):
+            setattr(self, 'fc_%i'%(i+1), torch.nn.Linear(prev_size, size))
+            prev_size = size
+        setattr(self, 'out', torch.nn.Linear(prev_size, self.out_dim))
+
+    def forward(self, x):
+        output = x
+        for i in range(1, self.n_layers+1):
+            output = getattr(self, 'fc_%i'%i)(output)
+            if self.nonlinearity_hidden is not None:
+                output = self.nonlinearity_hidden(output)
+        output = getattr(self, 'out')(output)
+        if self.nonlinearity_output is not None:
+            output = self.nonlinearity_output(output)
+        return output
+
+    def forward_parametrized(self, x, params):
+        output = x
+        param_idx = 0
+        for i in range(1, self.n_layers + 1):
+            output = torch.nn.functional.linear(output, params[param_idx], params[param_idx+1])
+            output = self.nonlinearlity(output)
+            param_idx += 2
+        output = torch.nn.functional.linear(output, params[param_idx], params[param_idx+1])
+        return output
+
+    def set_parameters_as_vector(self, vec):
+        vec = vec.flatten()
+        # assert len(vec) == sum([p.nelement() for p in self.parameters()])
+        ind=0
+        # set params of the hidden layers
+        for i in range(1, self.n_layers + 1):
+            old_weight = getattr(
+                getattr(self, 'fc_%i'%(i)),
+                'weight'
+            )
+            setattr(
+                getattr(self, 'fc_%i'%(i)),
+                'weight',
+                torch.nn.Parameter(vec[ind:ind+old_weight.nelement()].reshape(old_weight.shape))
+            )
+            ind = ind+old_weight.nelement()
+            old_bias = getattr(
+                getattr(self, 'fc_%i'%(i)),
+                'bias'
+            )
+            setattr(
+                getattr(self, 'fc_%i'%(i)),
+                'bias',
+                torch.nn.Parameter(vec[ind:ind+old_bias.nelement()].reshape(old_bias.shape))
+            )
+            ind = ind+old_bias.nelement()
+        # set params of the output layer
+        old_weight = getattr(
+            getattr(self, 'out'),
+            'weight'
+        )
+        setattr(
+            getattr(self, 'out'),
+            'weight',
+            torch.nn.Parameter(vec[ind:ind+old_weight.nelement()].reshape(old_weight.shape))
+        )
+        ind = ind+old_weight.nelement()
+        old_bias = getattr(
+            getattr(self, 'out'),
+            'bias'
+        )
+        setattr(
+            getattr(self, 'out'),
+            'bias',
+            torch.nn.Parameter(vec[ind:ind+old_bias.nelement()].reshape(old_bias.shape))
+        )
+        ind = ind+old_bias.nelement()
+        assert ind == len(vec)
+
+    def get_parameters_as_vector(self):
+        vec = torch.Tensor([])
+        # get params of the hidden layers
+        for i in range(1, self.n_layers + 1):
+            weight = getattr(
+                getattr(self, 'fc_%i'%(i)),
+                'weight'
+            )
+            vec = torch.cat((vec, weight.flatten()) , 0)
+            bias = getattr(
+                getattr(self, 'fc_%i'%(i)),
+                'bias'
+            )
+            vec = torch.cat((vec, bias.flatten()) , 0)
+        # get params of the output layer
+        weight = getattr(
+            getattr(self, 'out'),
+            'weight'
+        )
+        vec = torch.cat((vec, weight.flatten()) , 0)
+        bias = getattr(
+            getattr(self, 'out'),
+            'bias'
+        )
+        vec = torch.cat((vec, bias.flatten()) , 0)
+
+        return vec
+
+    def set_parameter(self, name, value):
+        current_val = getattr(self, name)
+        value = torch.nn.Parameter(value.reshape(current_val.shape))
+        setattr(self, name, value)
+
+    def reset(self):
+        return
+
+    # def parameter_shapes(self):
+    #     param_dict = OrderedDict(
+    #         (name, getattr(self, name).shape) for name in ['weight', 'bias']
+    #     )
+    #     return param_dict
+
+    def get_named_parameters(self):
+        param_dict = OrderedDict()
+        for i in range(1, self.n_layers + 1):
+            for name in ['weight', 'bias']:
+                param = getattr(
+                    getattr(self, 'fc_%i'%(i)),
+                    name
+                )
+                param_dict['fc_%i'%(i)+'.'+name] = param
+        return param_dict
+

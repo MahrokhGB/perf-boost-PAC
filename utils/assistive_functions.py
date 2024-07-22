@@ -26,3 +26,22 @@ class WrapLogger():
             h = self.logger.handlers[0]
             h.close()
             self.logger.removeHandler(h)
+
+
+def sample_2d_dist(dist, num_samples):
+    assert isinstance(dist, np.ndarray)
+    assert len(dist.shape)==2
+
+    # Create a flat copy of the distribution
+    flat = dist.flatten()
+
+    # Sample indices from the 1D array with the
+    # probability distribution from the original array
+    sample_index = np.random.choice(a=flat.size, p=flat, size=num_samples)
+
+    # Take this index and adjust it so it matches the original array
+    adjusted_index = np.unravel_index(sample_index, dist.shape)
+    if num_samples>1:
+        adjusted_index = np.array(list(zip(*adjusted_index)))
+
+    return adjusted_index
