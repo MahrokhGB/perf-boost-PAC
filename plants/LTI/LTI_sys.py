@@ -33,7 +33,7 @@ class LTISystem(torch.nn.Module):
         self.register_buffer('u_init', u_init)
 
     # # simulation
-    # def rollout(self, controller, data: torch.Tensor, train: bool):
+    # def rollout(self, controller, data: torch.Tensor):
     #     """
     #     rollout with state-feedback controller
 
@@ -80,7 +80,7 @@ class LTISystem(torch.nn.Module):
         f = torch.matmul(self.A, x) + torch.matmul(self.B, u)
         return f    # shape = (batch_size, 1, state_dim)
 
-    def rollout(self, controller, data, train=False):
+    def rollout(self, controller, data):
         """
         rollout REN for rollouts of the process noise
 
@@ -110,8 +110,6 @@ class LTISystem(torch.nn.Module):
                 u_log = torch.cat((u_log, u), 1)
 
         controller.reset()
-        if not train:
-            x_log, u_log = x_log.detach(), u_log.detach()
 
         return x_log, None, u_log
 

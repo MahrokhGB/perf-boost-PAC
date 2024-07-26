@@ -110,7 +110,7 @@ class RobotsSystem(torch.nn.Module):
         return self.noiseless_forward(t, x, u) + w.view(-1, 1, self.state_dim)
 
     # simulation
-    def rollout(self, controller, data, train=False):
+    def rollout(self, controller, data):
         """
         rollout REN for rollouts of the process noise
 

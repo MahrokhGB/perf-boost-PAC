@@ -64,26 +64,27 @@ def compute_loss_by_gridding(
     }
 
     # compute
-    for ind, (theta_tmp, bias_tmp) in enumerate(
-        itertools.product(theta_grid, bias_grid)
-    ):
-        loss_dict['theta'][ind] = theta_tmp
-        loss_dict['bias'][ind] = bias_tmp
-        # define controller
-        ctl_generic.set_parameters_as_vector(
-            torch.tensor([theta_tmp, bias_tmp], device=device)
-        )
-        # apply controller on train data
-        x_tmp, _, u_tmp = sys.rollout(
-            ctl_generic, train_data
-        )
-        loss_dict['train_loss'][ind] = loss_fn.forward(x_tmp, u_tmp).item()
-        # apply controller on test data
-        if not test_data is None:
-            x_tmp, _, u_tmp = sys.rollout(
-                ctl_generic, test_data
+    with torch.no_grad():
+        for ind, (theta_tmp, bias_tmp) in enumerate(
+            itertools.product(theta_grid, bias_grid)
+        ):
+            loss_dict['theta'][ind] = theta_tmp
+            loss_dict['bias'][ind] = bias_tmp
+            # define controller
+            ctl_generic.set_parameters_as_vector(
+                torch.tensor([theta_tmp, bias_tmp], device=device)
             )
-            loss_dict['test_loss'][ind] = loss_fn.forward(x_tmp, u_tmp).item()
+            # apply controller on train data
+            x_tmp, _, u_tmp = sys.rollout(
+                ctl_generic, train_data, train=False
+            )
+            loss_dict['train_loss'][ind] = loss_fn.forward(x_tmp, u_tmp).item()
+            # apply controller on test data
+            if not test_data is None:
+                x_tmp, _, u_tmp = sys.rollout(
+                    ctl_generic, test_data, train=False
+                )
+                loss_dict['test_loss'][ind] = loss_fn.forward(x_tmp, u_tmp).item()
 
     # save
     if not save_folder is None:

@@ -111,7 +111,7 @@ optimizer = torch.optim.Adam(ctl_generic.parameters(), lr=args.lr)
 # ------------ 6. Training ------------
 with torch.no_grad():
     x_log_valid, _, u_log_valid = sys.rollout(
-        controller=ctl_generic, data=valid_data, train=False,
+        controller=ctl_generic, data=valid_data
     )
     # loss of the valid data
     loss_valid = bounded_loss_fn.forward(x_log_valid, u_log_valid)
@@ -127,7 +127,7 @@ for epoch in range(1+args.epochs):
         optimizer.zero_grad()
         # simulate over horizon steps
         x_log, _, u_log = sys.rollout(
-            controller=ctl_generic, data=train_data_batch, train=True,
+            controller=ctl_generic, data=train_data_batch
         )
         # loss of this rollout
         loss = bounded_loss_fn.forward(x_log, u_log)
@@ -143,7 +143,7 @@ for epoch in range(1+args.epochs):
             # rollout the current controller on the valid data
             with torch.no_grad():
                 x_log_valid, _, u_log_valid = sys.rollout(
-                    controller=ctl_generic, data=valid_data, train=False,
+                    controller=ctl_generic, data=valid_data
                 )
                 # loss of the valid data
                 loss_valid = bounded_loss_fn.forward(x_log_valid, u_log_valid)
@@ -175,7 +175,7 @@ logger.info('[INFO] saved trained model.')
 logger.info('\n[INFO] evaluating the trained controller on %i training rollouts.' % train_data.shape[0])
 with torch.no_grad():
     x_log, _, u_log = sys.rollout(
-        controller=ctl_generic, data=train_data, train=False,
+        controller=ctl_generic, data=train_data
     )   # use the entire train data, not a batch
     # evaluate losses
     loss = bounded_loss_fn.forward(x_log, u_log)

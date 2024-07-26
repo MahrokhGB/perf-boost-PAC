@@ -26,10 +26,10 @@ class CLSystem(torch.nn.Module):
 
         xs, ys, us= self.sys.rollout(
             controller=self.controller,
-            data=data, train=True
+            data=data
         )
 
-        assert xs.shape==(S, T, state_dim), xs.shape
+        # assert xs.shape==(S, T, state_dim), xs.shape
         return xs, ys, us
 
     def forward(self, data):
@@ -67,8 +67,12 @@ class CLSystem(torch.nn.Module):
 from collections import OrderedDict
 from utils.assistive_functions import to_tensor
 class AffineController(torch.nn.Module):
-    def __init__(self, weight, bias=None):
+    def __init__(self, weight, train_method, bias=None):
         super().__init__()
+
+        assert train_method in ['empirical', 'normflow', 'SVGD']
+        self.train_method = train_method
+
         # weight is a tensor of shape = (in_dim, state_dim)
         weight = to_tensor(weight)
         if len(weight.shape)==1:
@@ -79,9 +83,15 @@ class AffineController(torch.nn.Module):
             if len(bias.shape)==1:
                 bias = bias.reshape(-1, 1)
         # define params
-        self.weight = torch.nn.Parameter(weight)
+        if train_method=='empirical':
+            self.weight = torch.nn.Parameter(weight)
+        else:
+            self.register_buffer('weight', weight)
         if bias is not None:
-            self.bias = torch.nn.Parameter(bias)
+            if train_method=='empirical':
+                self.bias = torch.nn.Parameter(bias)
+            else:
+                self.register_buffer('bias', bias)
         else:
             self.register_buffer('bias', torch.zeros((weight.shape[0], 1)))
 
@@ -100,13 +110,15 @@ class AffineController(torch.nn.Module):
     def set_parameters_as_vector(self, vec):
         # last element is bias, the rest is weight
         vec = vec.flatten()
-        assert len(vec) == sum([p.nelement() for p in self.parameters()])
+        # assert len(vec) == sum([p.nelement() for p in self.parameters()]) # TODO
         self.set_parameter('weight', vec[:self.weight.nelement()])
         self.set_parameter('bias', vec[self.weight.nelement():])
 
     def set_parameter(self, name, value):
         current_val = getattr(self, name)
-        value = torch.nn.Parameter(value.reshape(current_val.shape))
+        value = value.reshape(current_val.shape)
+        if self.train_method=='empirical':
+            value = torch.nn.Parameter(value)
         setattr(self, name, value)
 
     def reset(self):
@@ -127,9 +139,11 @@ class AffineController(torch.nn.Module):
 
 
 class NNController(torch.nn.Module):
-    def __init__(self, in_dim, out_dim, layer_sizes, nonlinearity_hidden=torch.tanh, nonlinearity_output=None):
+    def __init__(self, train_method, in_dim, out_dim, layer_sizes, nonlinearity_hidden=torch.tanh, nonlinearity_output=None):
         super(NNController, self).__init__()
 
+        assert train_method in ['empirical', 'normflow', 'SVGD']
+        self.train_method = train_method
         self.in_dim, self.out_dim = in_dim, out_dim
         self.nonlinearity_hidden, self.nonlinearity_output = nonlinearity_hidden, nonlinearity_output
 
@@ -140,6 +154,7 @@ class NNController(torch.nn.Module):
             setattr(self, 'fc_%i'%(i+1), torch.nn.Linear(prev_size, size))
             prev_size = size
         setattr(self, 'out', torch.nn.Linear(prev_size, self.out_dim))
+        # TODO: if not empirical, del params
 
     def forward(self, x):
         output = x
@@ -164,84 +179,71 @@ class NNController(torch.nn.Module):
 
     def set_parameters_as_vector(self, vec):
         vec = vec.flatten()
-        # assert len(vec) == sum([p.nelement() for p in self.parameters()])
         ind=0
-        # set params of the hidden layers
+
+        # --- set params of the hidden layers ---
         for i in range(1, self.n_layers + 1):
-            old_weight = getattr(
-                getattr(self, 'fc_%i'%(i)),
-                'weight'
-            )
-            setattr(
-                getattr(self, 'fc_%i'%(i)),
-                'weight',
-                torch.nn.Parameter(vec[ind:ind+old_weight.nelement()].reshape(old_weight.shape))
-            )
+            layer = getattr(self, 'fc_%i'%(i))
+            # get old weight and bias
+            old_weight = getattr(layer, 'weight')
+            old_bias = getattr(layer,'bias')
+            # get new weight and bias
+            new_weight = vec[ind:ind+old_weight.nelement()].reshape(old_weight.shape)
             ind = ind+old_weight.nelement()
-            old_bias = getattr(
-                getattr(self, 'fc_%i'%(i)),
-                'bias'
-            )
-            setattr(
-                getattr(self, 'fc_%i'%(i)),
-                'bias',
-                torch.nn.Parameter(vec[ind:ind+old_bias.nelement()].reshape(old_bias.shape))
-            )
+            new_bias = vec[ind:ind+old_bias.nelement()].reshape(old_bias.shape)
             ind = ind+old_bias.nelement()
-        # set params of the output layer
-        old_weight = getattr(
-            getattr(self, 'out'),
-            'weight'
-        )
-        setattr(
-            getattr(self, 'out'),
-            'weight',
-            torch.nn.Parameter(vec[ind:ind+old_weight.nelement()].reshape(old_weight.shape))
-        )
+            # convert to param if needed
+            if self.train_method == 'empirical':
+                new_weight = torch.nn.Parameter(new_weight)
+                new_bias = torch.nn.Parameter(new_bias)
+            # set new weight and bias
+            setattr(layer, 'weight', new_weight)
+            setattr(layer, 'bias', new_bias)
+
+        # --- set params of the output layer ---
+        layer = getattr(self, 'out')
+        # get old weight and bias
+        old_weight = getattr(layer, 'weight')
+        old_bias = getattr(layer, 'bias')
+        # get new weight and bias
+        new_weight = vec[ind:ind+old_weight.nelement()].reshape(old_weight.shape)
         ind = ind+old_weight.nelement()
-        old_bias = getattr(
-            getattr(self, 'out'),
-            'bias'
-        )
-        setattr(
-            getattr(self, 'out'),
-            'bias',
-            torch.nn.Parameter(vec[ind:ind+old_bias.nelement()].reshape(old_bias.shape))
-        )
+        new_bias = vec[ind:ind+old_bias.nelement()].reshape(old_bias.shape)
         ind = ind+old_bias.nelement()
+        # convert to param if needed
+        if self.train_method == 'empirical':
+            new_weight = torch.nn.Parameter(new_weight)
+            new_bias = torch.nn.Parameter(new_bias)
+        # set new weight and bias
+        setattr(layer, 'weight', new_weight)
+        setattr(layer, 'bias', new_bias)
+
+        # --- check all params are used ---
         assert ind == len(vec)
 
     def get_parameters_as_vector(self):
         vec = torch.Tensor([])
         # get params of the hidden layers
         for i in range(1, self.n_layers + 1):
-            weight = getattr(
-                getattr(self, 'fc_%i'%(i)),
-                'weight'
-            )
+            layer = getattr(self, 'fc_%i'%(i))
+            weight = getattr(layer, 'weight')
             vec = torch.cat((vec, weight.flatten()) , 0)
-            bias = getattr(
-                getattr(self, 'fc_%i'%(i)),
-                'bias'
-            )
+            bias = getattr(layer, 'bias')
             vec = torch.cat((vec, bias.flatten()) , 0)
         # get params of the output layer
-        weight = getattr(
-            getattr(self, 'out'),
-            'weight'
-        )
+        layer = getattr(self, 'out')
+        weight = getattr(layer, 'weight')
         vec = torch.cat((vec, weight.flatten()) , 0)
-        bias = getattr(
-            getattr(self, 'out'),
-            'bias'
-        )
+        bias = getattr(layer, 'bias')
         vec = torch.cat((vec, bias.flatten()) , 0)
 
         return vec
 
     def set_parameter(self, name, value):
         current_val = getattr(self, name)
-        value = torch.nn.Parameter(value.reshape(current_val.shape))
+        value = value.reshape(current_val.shape)
+        if self.train_method == 'empirical':
+            value = torch.nn.Parameter(value)
         setattr(self, name, value)
 
     def reset(self):

@@ -1,9 +1,10 @@
 import torch
 import normflows as nf
+import mynf # TODO
 
 def eval_norm_flow(nfm, sys, ctl_generic, data, num_samples, loss_fn, count_collisions=True):
     with torch.no_grad():
-        if isinstance(nfm, nf.NormalizingFlow):
+        if isinstance(nfm, nf.NormalizingFlow) or isinstance(nfm, mynf.NormalizingFlow): # TODO
             z, _ = nfm.sample(num_samples)
         else:
             z = nfm.sample(num_samples)
@@ -13,7 +14,7 @@ def eval_norm_flow(nfm, sys, ctl_generic, data, num_samples, loss_fn, count_coll
             ctl_generic.set_parameters_as_vector(z[param_ind, :])
             x_log, _, u_log = sys.rollout(
                 controller=ctl_generic,
-                data=data, train=False,
+                data=data,
             )
             # evaluate losses
             loss[param_ind] = loss_fn.forward(x_log, u_log)

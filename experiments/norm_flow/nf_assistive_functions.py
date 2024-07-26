@@ -13,7 +13,7 @@ def eval_norm_flow(nfm, sys, ctl_generic, data, num_samples, loss_fn, count_coll
             ctl_generic.set_parameters_as_vector(z[param_ind, :])
             x_log, _, u_log = sys.rollout(
                 controller=ctl_generic,
-                data=data, train=False,
+                data=data,
             )
             # evaluate losses
             loss[param_ind] = loss_fn.forward(x_log, u_log)
