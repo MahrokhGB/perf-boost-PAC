@@ -61,6 +61,9 @@ class PerfBoostController(nn.Module):
             posdef_tol=posdef_tol, contraction_rate_lb=contraction_rate_lb
         ).to(device)
 
+        # set number of trainable params
+        self.num_params = self.c_ren.num_params
+
         # define the system dynamics without process noise
         self.noiseless_forward = noiseless_forward
 

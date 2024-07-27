@@ -36,33 +36,6 @@ class CLSystem(torch.nn.Module):
         xs, ys, us = self.rollout(data)
         return (xs, us)
 
-
-# from controllers.REN_controller import RENController
-# def get_controller(
-#     controller_type, sys,
-#     # REN controller
-#     n_xi=None, l=None, initialization_std=None,
-#     train_method='SVGD', output_amplification=20
-# ):
-#     if controller_type == 'REN':
-#         assert not (n_xi is None or l is None)
-#         generic_controller = RENController(
-#             noiseless_forward=sys.noiseless_forward,
-#             output_amplification=output_amplification,
-#             state_dim=sys.state_dim, in_dim=sys.in_dim,
-#             n_xi=n_xi, l=l, x_init=sys.x_init, u_init=sys.u_init,
-#             train_method=train_method, initialization_std=initialization_std
-#         )
-#     elif controller_type=='Affine':
-#         generic_controller = AffineController(
-#             weight=torch.zeros(sys.in_dim, sys.state_dim, device=device, dtype=torch.float32),
-#             bias=torch.zeros(sys.in_dim, 1, device=device, dtype=torch.float32)
-#         )
-#     else:
-#         raise NotImplementedError
-
-#     return generic_controller
-
 # ---------- CONTROLLER ----------
 from collections import OrderedDict
 from utils.assistive_functions import to_tensor
@@ -72,6 +45,11 @@ class AffineController(torch.nn.Module):
 
         assert train_method in ['empirical', 'normflow', 'SVGD']
         self.train_method = train_method
+
+        # set number of trainable params
+        self.num_params = weight.nelement()
+        if not bias is None:
+            self.num_params += bias.nelement()
 
         # weight is a tensor of shape = (in_dim, state_dim)
         weight = to_tensor(weight)
@@ -98,7 +76,6 @@ class AffineController(torch.nn.Module):
         # check dimensions
         self.out_dim, self.in_dim = self.weight.shape
         assert self.bias.shape==(self.out_dim, 1)
-
 
     def forward(self, what):
         # what must be of shape (batch_size, state_dim, self.in_dim)
@@ -153,6 +130,9 @@ class NNController(torch.nn.Module):
             setattr(self, 'fc_%i'%(i+1), torch.nn.Linear(prev_size, size))
             prev_size = size
         setattr(self, 'out', torch.nn.Linear(prev_size, self.out_dim))
+
+        # set number of trainable params
+        self.num_params = sum([p.nelement() for p in self.parameters()])
 
         # convert param to buffer if not empirical
         if not self.train_method=='empirical':

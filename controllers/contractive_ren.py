@@ -80,6 +80,8 @@ class ContractiveREN(nn.Module):
         # define trainble params
         self.training_param_names = ['X', 'Y', 'B2', 'C2', 'D21', 'D22', 'D12']
         self._init_trainable_params(initialization_std)
+        # set number of trainable params
+        self.num_params = sum([getattr(self, p_name).nelement() for p_name in self.training_param_names])
 
         # mask
         self.register_buffer('eye_mask_H', torch.eye(2 * self.dim_internal + self.dim_nl))

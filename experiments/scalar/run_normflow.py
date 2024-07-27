@@ -101,8 +101,7 @@ elif args.cont_type=='NN':
     )
 else:
     raise KeyError('[Err] args.cont_type must be PerfBoost, NN, or Affine.')
-# num_params = sum([p.nelement() for p in ctl_generic.parameters()])#TODO
-num_params = 2
+num_params = ctl_generic.num_params
 logger.info('[INFO] Controller is of type ' + args.cont_type + ' and has %i parameters.' % num_params)
 
 # ------------ 4. Loss ------------
