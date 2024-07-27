@@ -10,7 +10,7 @@ sys.path.insert(1, BASE_DIR)
 from config import device
 from loss_functions import *
 from plants import CLSystem
-from controllers.abstract import NNController, AffineController
+from controllers.affine_controller import NNController, AffineController
 from utils.assistive_functions import to_tensor, WrapLogger
 from controllers import PerfBoostController
 

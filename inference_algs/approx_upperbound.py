@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 
-from controllers.abstract import AffineController
+from controllers.affine_controller import AffineController
 
 
 def approx_Z(grid_dict, sys, lq_loss, data, lambda_):
