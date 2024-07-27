@@ -76,13 +76,13 @@ def compute_loss_by_gridding(
             )
             # apply controller on train data
             x_tmp, _, u_tmp = sys.rollout(
-                ctl_generic, train_data, train=False
+                ctl_generic, train_data
             )
             loss_dict['train_loss'][ind] = loss_fn.forward(x_tmp, u_tmp).item()
             # apply controller on test data
             if not test_data is None:
                 x_tmp, _, u_tmp = sys.rollout(
-                    ctl_generic, test_data, train=False
+                    ctl_generic, test_data
                 )
                 loss_dict['test_loss'][ind] = loss_fn.forward(x_tmp, u_tmp).item()
 

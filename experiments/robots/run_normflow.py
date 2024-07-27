@@ -7,11 +7,11 @@ print(BASE_DIR)
 sys.path.insert(1, BASE_DIR)
 
 from config import device
-from nf_assistive_functions import eval_norm_flow
+from inference_algs.normflow_assist import eval_norm_flow
 from arg_parser import argument_parser, print_args
 from plants import RobotsSystem, RobotsDataset
 from utils.plot_functions import *
-from controllers import PerfBoostController, AffineController
+from controllers import PerfBoostController, AffineController, NNController
 from loss_functions import RobotsLossMultiBatch
 from utils.assistive_functions import WrapLogger
 
@@ -21,22 +21,25 @@ from tqdm import tqdm
 import normflows as nf
 from inference_algs.distributions import GibbsPosterior, GibbsWrapperNF
 
-CONTROLLER_TYPE = 'Affine' #'PerfBoost'
-BASE_IS_PRIOR = True
-
-# ----- SET UP LOGGER -----
-now = datetime.now().strftime("%m_%d_%H_%M_%S")
-save_path = os.path.join(BASE_DIR, 'experiments', 'norm_flow', 'saved_results')
-save_folder = os.path.join(save_path, 'nf_' + CONTROLLER_TYPE + '_' + now)
-os.makedirs(save_folder)
-logging.basicConfig(filename=os.path.join(save_folder, 'log'), format='%(asctime)s %(message)s', filemode='w')
-logger = logging.getLogger('nf')
-logger.setLevel(logging.DEBUG)
-logger = WrapLogger(logger)
+BASE_IS_PRIOR = False
+LEARN_BASE = True
+TRAIN_METHOD = 'normflow'
 
 # ----- parse and set experiment arguments -----
 args = argument_parser()
 msg = print_args(args)
+
+# ----- SET UP LOGGER -----
+now = datetime.now().strftime("%m_%d_%H_%M_%S")
+save_path = os.path.join(BASE_DIR, 'experiments', 'robots', 'saved_results')
+save_folder = os.path.join(save_path, args.cont_type+'_'+now)
+os.makedirs(save_folder)
+logging.basicConfig(filename=os.path.join(save_folder, 'log'), format='%(asctime)s %(message)s', filemode='w')
+logger = logging.getLogger('ren_controller_')
+logger.setLevel(logging.DEBUG)
+logger = WrapLogger(logger)
+
+logger.info('---------- ' + TRAIN_METHOD + ' ----------\n\n')
 logger.info(msg)
 torch.manual_seed(args.random_seed)
 
@@ -51,7 +54,8 @@ plot_data = torch.zeros(1, t_ext, train_data.shape[-1], device=device)
 plot_data[:, 0, :] = (dataset.x0.detach() - dataset.xbar)
 plot_data = plot_data.to(device)
 # batch the data
-train_dataloader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True)
+# train_dataloader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True) # TODO
+train_dataloader = DataLoader(train_data, batch_size=args.num_rollouts, shuffle=False)
 
 # ------------ 2. Plant ------------
 plant_input_init = None     # all zero
@@ -62,23 +66,30 @@ sys = RobotsSystem(
 ).to(device)
 
 # ------------ 3. Controller ------------
-if CONTROLLER_TYPE=='PerfBoost':
+if args.cont_type=='PerfBoost':
     ctl_generic = PerfBoostController(
         noiseless_forward=sys.noiseless_forward,
         input_init=sys.x_init, output_init=sys.u_init,
         dim_internal=args.dim_internal, dim_nl=args.dim_nl,
         initialization_std=args.cont_init_std,
-        output_amplification=20,
+        output_amplification=20, train_method=TRAIN_METHOD
     ).to(device)
-elif CONTROLLER_TYPE=='Affine':
+elif args.cont_type=='Affine':
     ctl_generic = AffineController(
         weight=torch.zeros(sys.in_dim, sys.state_dim, device=device, dtype=torch.float32),
-        bias=torch.zeros(sys.in_dim, 1, device=device, dtype=torch.float32)
+        bias=torch.zeros(sys.in_dim, 1, device=device, dtype=torch.float32),
+        train_method=TRAIN_METHOD
+    )
+elif args.cont_type=='NN':
+    ctl_generic = NNController(
+        in_dim=sys.state_dim, out_dim=sys.in_dim, layer_sizes=[],
+        train_method=TRAIN_METHOD
     )
 else:
-    raise KeyError('[Err] CONTROLLER_TYPE must be PerfBoost or Affine.')
+    raise KeyError('[Err] args.cont_type must be PerfBoost, NN, or Affine.')
+
 num_params = sum([p.nelement() for p in ctl_generic.parameters()])
-logger.info('[INFO] Controller is of type ' + CONTROLLER_TYPE + ' and has %i parameters.' % num_params)
+logger.info('[INFO] Controller is of type ' + args.cont_type + ' and has %i parameters.' % num_params)
 
 # ------------ 4. Loss ------------
 Q = torch.kron(torch.eye(args.n_agents), torch.eye(4)).to(device)   # TODO: move to args and print info
@@ -105,15 +116,15 @@ original_loss_fn = RobotsLossMultiBatch(
 )
 
 # ------------ 5. NEW: Prior ------------
-if isinstance(ctl_generic, AffineController):
+if args.ctl_type in ['Affine', 'NN']:
     prior_dict = {
-        'type_w':'Gaussian',
+        'type':'Gaussian', 'type_w':'Gaussian',
         'type_b':'Gaussian_biased',
         'weight_loc':0, 'weight_scale':1,
         'bias_loc':0, 'bias_scale':5,
     }
 else:
-    prior_std = 70 #TODO: set too flat
+    prior_std = 7
     prior_dict = {'type':'Gaussian'}
     training_param_names = ['X', 'Y', 'B2', 'C2', 'D21', 'D22', 'D12']
     for name in training_param_names:
@@ -124,7 +135,6 @@ else:
 epsilon = 0.1       # PAC holds with Pr >= 1-epsilon
 gibbs_lambda_star = (8*args.num_rollouts*math.log(1/epsilon))**0.5   # lambda for Gibbs
 logger.info('gibbs_lambda_star %f' % gibbs_lambda_star)
-# gibbs_lambda_star = 10000    # TODO
 # define target distribution
 gibbs_posteior = GibbsPosterior(
     loss_fn=bounded_loss_fn, lambda_=gibbs_lambda_star, prior_dict=prior_dict,
@@ -271,7 +281,6 @@ with tqdm(range(max_iter)) as t:
             plt.savefig(os.path.join(save_folder, 'loss.pdf'))
             plt.show()
 
-# TODO: sample from trained nfm
 # ------ 7. evaluate the trained model ------
 # evaluate on the train data
 logger.info('\n[INFO] evaluating the trained flow on %i training rollouts.' % args.num_rollouts)

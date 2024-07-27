@@ -6,7 +6,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 sys.path.insert(1, BASE_DIR)
 
 from config import device
-from nf_assistive_functions import eval_norm_flow
+from inference_algs.normflow_assist import eval_norm_flow
 from arg_parser import argument_parser, print_args
 from plants import LTISystem, LTIDataset
 # from plot_functions import *
@@ -17,11 +17,11 @@ from utils.assistive_functions import WrapLogger, sample_2d_dist
 import math
 from tqdm import tqdm
 import normflows as nf
-from Gibbs2d_assistive_functions import *
+from inference_algs.Gibbs2d_assistive_functions import *
 from inference_algs.distributions import GibbsPosterior, GibbsWrapperNF
 
 import numpy as np
-import mynf # TODO
+import inference_algs.normflow_assist.mynf as mynf # TODO
 from control import dlqr
 import matplotlib.pyplot as plt
 import pickle
@@ -100,7 +100,7 @@ elif args.cont_type=='NN':
         train_method=TRAIN_METHOD
     )
 else:
-    raise KeyError('[Err] args.cont_type must be PerfBoost or Affine.')
+    raise KeyError('[Err] args.cont_type must be PerfBoost, NN, or Affine.')
 # num_params = sum([p.nelement() for p in ctl_generic.parameters()])#TODO
 num_params = 2
 logger.info('[INFO] Controller is of type ' + args.cont_type + ' and has %i parameters.' % num_params)
@@ -126,10 +126,12 @@ K_lqr_ih, _, _ = dlqr(
 theta_mid_grid = -K_lqr_ih[0,0]
 
 # ------ prior on bias ------
+use_ideal = True
 if isinstance(ctl_generic, AffineController):
     prior_dict = {
         'type_w':'Gaussian',
-        'weight_loc':theta_mid_grid, 'weight_scale':1,
+        'weight_loc': theta_mid_grid if use_ideal else 0,
+        'weight_scale':1 if use_ideal else 10,
     }
     if prior_type_b == 'Uniform':
         prior_dict.update({
@@ -139,11 +141,10 @@ if isinstance(ctl_generic, AffineController):
     elif prior_type_b == 'Gaussian_biased_wide':
         prior_dict.update({
             'type_b':'Gaussian_biased',
-            'bias_loc':-disturbance['mean'][0]/sys.B[0,0],
-            'bias_scale':1.5
+            'bias_loc': -disturbance['mean'][0]/sys.B[0,0] if use_ideal else 0,
+            'bias_scale':1.5 if use_ideal else 5,
         })
 elif isinstance(ctl_generic, NNController):
-    use_ideal = True
     prior_dict = {
         'type':'Gaussian', 'type_b':'Gaussian', 'type_w':'Gaussian',
         'weight_loc': theta_mid_grid if use_ideal else 0,

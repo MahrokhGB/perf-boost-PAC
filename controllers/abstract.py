@@ -110,7 +110,6 @@ class AffineController(torch.nn.Module):
     def set_parameters_as_vector(self, vec):
         # last element is bias, the rest is weight
         vec = vec.flatten()
-        # assert len(vec) == sum([p.nelement() for p in self.parameters()]) # TODO
         self.set_parameter('weight', vec[:self.weight.nelement()])
         self.set_parameter('bias', vec[self.weight.nelement():])
 
@@ -154,7 +153,23 @@ class NNController(torch.nn.Module):
             setattr(self, 'fc_%i'%(i+1), torch.nn.Linear(prev_size, size))
             prev_size = size
         setattr(self, 'out', torch.nn.Linear(prev_size, self.out_dim))
-        # TODO: if not empirical, del params
+
+        # convert param to buffer if not empirical
+        if not self.train_method=='empirical':
+            for i, size in enumerate(layer_sizes):
+                layer = getattr(self, 'fc_%i'%(i+1))
+                old_weight, old_bias = layer.weight, layer.bias
+                del layer.weight
+                del layer.bias
+                layer.register_buffer('weight', old_weight)
+                layer.register_buffer('bias', old_bias)
+            # output layer
+            layer = getattr(self, 'out')
+            old_weight, old_bias = layer.weight, layer.bias
+            del layer.weight
+            del layer.bias
+            layer.register_buffer('weight', old_weight)
+            layer.register_buffer('bias', old_bias)
 
     def forward(self, x):
         output = x

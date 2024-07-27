@@ -14,15 +14,14 @@ from controllers import AffineController, NNController, PerfBoostController
 from loss_functions import LQLossFH
 from utils.assistive_functions import WrapLogger, sample_2d_dist
 
-import numpy as np #TODO: remove
-from control import dlqr
+import numpy as np
 import matplotlib.pyplot as plt
 import pickle
 
 PLOT_DIST = True
 BASE_IS_PRIOR = False
 
-# ----- parse and set experiment arguments ----- TODO
+# ----- parse and set experiment arguments -----
 args = argument_parser()
 msg = print_args(args)
 
@@ -165,7 +164,6 @@ if args.return_best:
 # ------ 7. Save and evaluate the trained model ------
 # save
 res_dict = ctl_generic.c_ren.state_dict()
-# TODO: append args
 res_dict['Q'] = Q
 filename = os.path.join(save_folder, 'trained_controller'+'.pt')
 torch.save(res_dict, filename)

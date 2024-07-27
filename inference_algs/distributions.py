@@ -45,75 +45,55 @@ class GibbsPosterior():
         Args:
             params: of shape (param_batch_size, num_controller_params)
         """
-        # sd = self.generic_cl_system.controller.state_dict()
-        # # print(sd)
-        # sd['out.weight'] = params[0,0].reshape(sd['out.weight'].shape)
-        # sd['out.bias']=params[0,1].reshape(sd['out.bias'].shape)
-        # self.generic_cl_system.controller.load_state_dict(sd)
-        self.generic_cl_system.controller.set_parameters_as_vector(params[0, :].reshape(1,-1))
-        # print(params[0, :].grad_fn)
-        # print(self.generic_cl_system.controller.weight.grad_fn)
-        xs, us = self.generic_cl_system(train_data)
-        loss_val = self.loss_fn.forward(xs, us) #TODO
-        # L = params.shape[0]
-        # print('L', L)
-        # assert params.requires_grad
-        # assert not params.is_leaf
-        # assert not params.grad_fn is None
+        L = params.shape[0]
 
-        # param_ind = 0
-        # loss_val = None
-        # for _ in range(math.ceil(L/self.num_ensemble_models)):
-        #     model_ind = 0
-        #     # set params to controllers
-        #     for _ in range(self.num_ensemble_models):
-        #         if param_ind==L:
-        #             break
-        #         self.ensemble_models[model_ind].controller.set_parameters_as_vector(
-        #             params[param_ind, :].reshape(1,-1)
-        #         )
-        #         model_ind += 1
-        #         param_ind += 1
-        #     used_ensemble_models = self.ensemble_models[0:model_ind]
+        param_ind = 0
+        loss_val = None
+        for _ in range(math.ceil(L/self.num_ensemble_models)):
+            model_ind = 0
 
-        #     # stack all ensemble models
-        #     ensemble_params_mdl, ensemble_buffers_mdl = stack_module_state(used_ensemble_models)
-        #     # rollout
-        #     xs, us = torch.vmap(
-        #         self.ensemble_functional_model,
-        #         in_dims=(0, 0, None)
-        #     )(ensemble_params_mdl, ensemble_buffers_mdl, train_data)
-        #     # assert xs.requires_grad
-        #     # assert not xs.is_leaf
-        #     # assert not xs.grad_fn is None
-        #     # compute loss
-        #     # t_now=time.time()
-        #     if isinstance(self.loss_fn, RobotsLoss) or isinstance(self.loss_fn, LQLossFH):
-        #         for ind in range(xs.shape[0]):
-        #             loss_val_tmp = self.loss_fn.forward(xs[ind, :, :, :], us[ind, :, :, :])
-        #             if loss_val is None:
-        #                 loss_val = [loss_val_tmp]
-        #             else:
-        #                 loss_val.append(loss_val_tmp)
-        #             # assert loss_val_tmp.requires_grad
-        #             # assert not loss_val_tmp.is_leaf
-        #             # assert not loss_val_tmp.grad_fn is None
-        #     elif isinstance(self.loss_fn, RobotsLossMultiBatch) or isinstance(self.loss_fn, LQLossFHMultiBatch):
-        #         loss_val_tmp = self.loss_fn.forward(xs, us)
-        #         if loss_val is None:
-        #             loss_val = [loss_val_tmp]
-        #         else:
-        #             loss_val.append(loss_val_tmp)
-        #     else:
-        #         raise NotImplementedError
-        #     # print('loss time ', time.time()-t_now)
-        # loss_val = torch.cat(loss_val)
-        # # assert loss_val.requires_grad
-        # # assert not loss_val.is_leaf
-        # # assert not loss_val.grad_fn is None
-        # print(loss_val)
-        # assert param_ind==L
-        # assert loss_val.shape[0]==L and loss_val.shape[1]==1, loss_val.shape
+            # set params to controllers
+            for _ in range(self.num_ensemble_models):
+                if param_ind==L:
+                    break
+                self.ensemble_models[model_ind].controller.set_parameters_as_vector(
+                    params[param_ind, :].reshape(1,-1)
+                )
+                model_ind += 1
+                param_ind += 1
+            used_ensemble_models = self.ensemble_models[0:model_ind]
+
+            # stack all ensemble models
+            ensemble_params_mdl, ensemble_buffers_mdl = stack_module_state(used_ensemble_models)
+
+            # rollout
+            xs, us = torch.vmap(
+                self.ensemble_functional_model,
+                in_dims=(0, 0, None)
+            )(ensemble_params_mdl, ensemble_buffers_mdl, train_data)
+
+            # compute loss
+            if isinstance(self.loss_fn, RobotsLoss) or isinstance(self.loss_fn, LQLossFH):
+                for ind in range(xs.shape[0]):
+                    loss_val_tmp = self.loss_fn.forward(xs[ind, :, :, :], us[ind, :, :, :])
+                    if loss_val is None:
+                        loss_val = [loss_val_tmp]
+                    else:
+                        loss_val.append(loss_val_tmp)
+            elif isinstance(self.loss_fn, RobotsLossMultiBatch) or isinstance(self.loss_fn, LQLossFHMultiBatch):
+                loss_val_tmp = self.loss_fn.forward(xs, us)
+                if loss_val is None:
+                    loss_val = [loss_val_tmp]
+                else:
+                    loss_val.append(loss_val_tmp)
+            else:
+                raise NotImplementedError
+
+        loss_val = torch.cat(loss_val)
+
+        assert param_ind==L
+        assert loss_val.shape[0]==L and loss_val.shape[1]==1, loss_val.shape
+
         return loss_val
 
     def log_prob(self, params, train_data):
@@ -126,15 +106,15 @@ class GibbsPosterior():
         L = params.shape[0]
         assert params.grad_fn is not None
         lpl = self._log_prob_likelihood(params, train_data)
-        # lpl = lpl.reshape(L) # NOTE
+        lpl = lpl.reshape(L) # TODO
         lpp = self._log_prob_prior(params)
         lpp = lpp.reshape(L)
         # assert not (lpl.grad_fn is None or lpp.grad_fn is None)
         '''
         NOTE: To debug, remove the effect of the prior by returning -lpl
         '''
-        return -lpl # TODO
-        # return lpp - self.lambda_ * lpl
+        # return -lpl
+        return lpp - self.lambda_ * lpl
 
     def sample_params_from_prior(self, shape):
         # shape is torch.Size()
@@ -281,47 +261,6 @@ class GibbsPosterior():
 
 # -------------------------
 # -------------------------
-from normflows.distributions import Target
-# from torch.utils.data import DataLoader
-class GibbsWrapperNF(Target):
-    """
-    Wrap given Gibbs distribution to be used in normflows
-    """
-
-    def __init__(
-        self, target_dist, train_dataloader,
-        prop_scale=torch.tensor(6.0), prop_shift=torch.tensor(-3.0)
-    ):
-        """Constructor
-
-        Args:
-          target_dist: Distribution to be approximated
-          train_dataloader: Data loader used to compute the Gibbs dist for training
-          prop_scale: Scale for the uniform proposal
-          prop_shift: Shift for the uniform proposal
-        """
-        super().__init__(prop_scale=prop_scale, prop_shift=prop_shift)
-        self.target_dist = target_dist
-        self.train_data_iterator = list(train_dataloader)
-        self.max_log_prob = 0.0
-        self.data_batch_ind = 0
-        # TODO: random seed must be fixed across REN controller, ...
-
-    def log_prob(self, z):
-        """
-        Args:
-          z: value or batch of latent variable
-
-        Returns:
-          log probability of the distribution for z
-        """
-        train_data = self.train_data_iterator[self.data_batch_ind]
-        self.data_batch_ind = (self.data_batch_ind+1) % len(self.train_data_iterator)
-        # t = time.time()
-        lp = self.target_dist.log_prob(params=z, train_data=train_data)
-        # print('log prob time ', time.time()-t)
-        self.train_data = None  # next call requires setting a new training data
-        return lp
 
 
 # -------------------------
