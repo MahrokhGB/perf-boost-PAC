@@ -1,3 +1,4 @@
-from .affine_controller import AffineController, NNController
+from .affine_controller import AffineController
+from .nn_controller import NNController
 from .contractive_ren import ContractiveREN
 from .PB_controller import PerfBoostController

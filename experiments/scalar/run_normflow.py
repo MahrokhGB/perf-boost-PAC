@@ -18,7 +18,8 @@ import math
 from tqdm import tqdm
 import normflows as nf
 from inference_algs.Gibbs2d_assistive_functions import *
-from inference_algs.distributions import GibbsPosterior, GibbsWrapperNF
+from inference_algs.distributions import GibbsPosterior
+from inference_algs.normflow_assist import GibbsWrapperNF
 
 import numpy as np
 import inference_algs.normflow_assist.mynf as mynf # TODO

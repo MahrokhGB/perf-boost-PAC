@@ -19,7 +19,8 @@ from utils.assistive_functions import WrapLogger
 import math
 from tqdm import tqdm
 import normflows as nf
-from inference_algs.distributions import GibbsPosterior, GibbsWrapperNF
+from inference_algs.distributions import GibbsPosterior
+from inference_algs.normflow_assist import GibbsWrapperNF
 
 BASE_IS_PRIOR = False
 LEARN_BASE = True

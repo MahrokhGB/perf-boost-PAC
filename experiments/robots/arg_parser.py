@@ -20,6 +20,7 @@ def argument_parser():
     parser.add_argument('--linearize-plant', type=bool, default=False, help='Linearize plant or not. Default is False.')
 
     # controller
+    parser.add_argument('--cont-type', type=str, default='Affine', help='Controller type. Can be Affine or PerfBoost. Default is Affine.')
     parser.add_argument('--cont-init-std', type=float, default=0.1 , help='Initialization std for controller params. Default is 0.1.')
     parser.add_argument('--dim-internal', type=int, default=8, help='Dimension of the internal state of the controller. Adjusts the size of the linear part of REN. Default is 8.')
     parser.add_argument('--dim-nl', type=int, default=8, help='size of the non-linear part of REN. Default is 8.')

@@ -1,4 +1,4 @@
-import torch, sys, os, time, math, copy
+import torch, sys, os, math, copy
 from collections import OrderedDict
 from torch.func import stack_module_state, functional_call
 from pyro.distributions import Normal, Uniform
@@ -10,9 +10,8 @@ sys.path.insert(1, BASE_DIR)
 from config import device
 from loss_functions import *
 from plants import CLSystem
-from controllers.affine_controller import NNController, AffineController
+from controllers import NNController, AffineController, PerfBoostController
 from utils.assistive_functions import to_tensor, WrapLogger
-from controllers import PerfBoostController
 
 class GibbsPosterior():
 
