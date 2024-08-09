@@ -117,7 +117,7 @@ original_loss_fn = RobotsLossMultiBatch(
 )
 
 # ------------ 5. NEW: Prior ------------
-if args.ctl_type in ['Affine', 'NN']:
+if args.cont_type in ['Affine', 'NN']:
     prior_dict = {
         'type':'Gaussian', 'type_w':'Gaussian',
         'type_b':'Gaussian_biased',
@@ -154,7 +154,7 @@ target = GibbsWrapperNF(
 
 # ****** INIT NORMFLOWS ******
 num_flows = 16
-from_type = 'Radial'
+from_type = 'Planar'
 
 flows = []
 for i in range(num_flows):
@@ -223,24 +223,21 @@ logger.info(msg)
 
 # ****** TRAIN NORMFLOWS ******
 # Train model
-max_iter = 1500
 num_samples_nf_train = 400
 num_samples_nf_eval = 100
-anneal_iter = int(max_iter/2)
+anneal_iter = int(args.epochs/2)
 annealing = False # NOTE
-show_iter = 20
-lr = 1e-2
 weight_decay = 0
 msg = '[INFO] Training setup: annealing: ' + str(annealing)
 msg += ' -- annealing iter: %i' % anneal_iter if annealing else ''
-msg += ' -- learning rate: %.6f' % lr + ' -- weight decay: %.6f' % weight_decay
+msg += ' -- learning rate: %.6f' % args.lr + ' -- weight decay: %.6f' % weight_decay
 logger.info(msg)
 
-nf_loss_hist = [None]*max_iter
+nf_loss_hist = [None]*args.epochs
 
-# torch.autograd.set_detect_anomaly(True)
-optimizer = torch.optim.Adam(nfm.parameters(), lr=lr, weight_decay=weight_decay)
-with tqdm(range(max_iter)) as t:
+optimizer = torch.optim.Adam(nfm.parameters(), lr=args.lr, weight_decay=weight_decay)
+param_history = list(nfm.parameters()).detach().clone().numpy().reshape(1,-1)
+with tqdm(range(args.epochs)) as t:
     for it in t:
         optimizer.zero_grad()
         if annealing:
@@ -252,28 +249,37 @@ with tqdm(range(max_iter)) as t:
         nf_loss.backward()
         for name, param in nfm.named_parameters():
             if not torch.isfinite(param.grad).all():
-                print('grad for ' + name + 'is infinite.')
+                logger.info('grad for ' + name + 'is infinite.')
             if param.isnan().any():
-                print(param, ' is nan in iter ', it)
+                logger.info(param, ' is nan in iter ', it)
         optimizer.step()
+
+        # add to history
+        param_history = np.concatenate(
+            (param_history, list(nfm.parameters()).detach().clone().numpy().reshape(1,-1)),
+            axis=0
+        )
 
         nf_loss_hist[it] = nf_loss.to('cpu').data.numpy()
 
         # Eval and log
-        if (it + 1) % show_iter == 0 or it+1==max_iter:
+        if (it + 1) % args.log_epoch == 0 or it+1==args.epochs:
             # sample some controllers and eval
             with torch.no_grad():
                 z, _ = nfm.sample(num_samples_nf_eval)
+                z_mean = torch.mean(z, axis=0).reshape(1, -1)
                 lpl = target.target_dist._log_prob_likelihood(params=z, train_data=train_data)
+                lpl_mean = target.target_dist._log_prob_likelihood(params=z_mean, train_data=train_data)
 
             # log nf loss
             elapsed = t.format_dict['elapsed']
             elapsed_str = t.format_interval(elapsed)
             msg = 'Iter %i' % (it+1) + ' --- elapsed time: ' + elapsed_str  + ' --- norm flow loss: %f'  % nf_loss.item()
-            msg += ' --- train loss %f' % torch.mean(lpl)
+            msg += ' --- train loss %f' % torch.mean(lpl) + ' --- train loss of mean %f' % torch.mean(lpl_mean)
             logger.info(msg)
+
             # save nf model
-            name = 'final' if it+1==max_iter else 'itr '+str(it+1)
+            name = 'final' if it+1==args.epochs else 'itr '+str(it+1)
             torch.save(nfm.state_dict(), os.path.join(save_folder, name+'_nfm'))
             # plot loss
             plt.figure(figsize=(10, 10))
@@ -281,6 +287,24 @@ with tqdm(range(max_iter)) as t:
             plt.legend()
             plt.savefig(os.path.join(save_folder, 'loss.pdf'))
             plt.show()
+            # plot param history
+            plt.figure(figsize=(10, 10))
+            for param_num in range(num_params):
+                plt.plot(nf_loss_hist[:, param_num], label='param '+str(param_num))
+            plt.legend()
+            plt.savefig(os.path.join(save_folder, 'param.pdf'))
+            plt.show()
+            # plot closed_loop
+            with torch.no_grad():
+                ctl_generic.set_parameters_as_vector(z_mean)
+                x_log, _, u_log = sys.rollout(ctl_generic, plot_data)
+            plot_trajectories(
+                x_log[0, :, :], # remove extra dim due to batching
+                dataset.xbar, sys.n_agents, text="CL - "+name, T=t_ext,
+                save_folder=save_folder, filename='CL_'+name+'.pdf',
+                obstacle_centers=bounded_loss_fn.obstacle_centers,
+                obstacle_covs=bounded_loss_fn.obstacle_covs
+            )
 
 # ------ 7. evaluate the trained model ------
 # evaluate on the train data

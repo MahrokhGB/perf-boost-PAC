@@ -176,7 +176,7 @@ class GibbsPosterior():
                 # set dist
                 self._param_dist(name, dist.to_event(1))
         # set prior for NN controller
-        if isinstance(self.generic_cl_system.controller, NNController):
+        elif isinstance(self.generic_cl_system.controller, NNController):
             # check if prior is provided
             for name in ['weight', 'bias']:
                 if not name+'_loc' in prior_dict.keys():

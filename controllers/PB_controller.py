@@ -24,6 +24,7 @@ class PerfBoostController(nn.Module):
         initialization_std: float = 0.5,
         posdef_tol: float = 0.001, contraction_rate_lb: float = 1.0,
         ren_internal_state_init=None,
+        train_method: str = 'empirical',
         # misc
         output_amplification: float=20,
     ):
@@ -40,10 +41,12 @@ class PerfBoostController(nn.Module):
             epsilon (float, optional): Positive and negligible scalar to force positive definite matrices.
             contraction_rate_lb (float, optional): Lower bound on the contraction rate. Defaults to 1.
             ren_internal_state_init (torch.Tensor, optional): initial state of the REN. Defaults to 0 when None.
+            train_method (str): Training method. Defaults to empirical
         """
         super().__init__()
 
         self.output_amplification = output_amplification
+        self.train_method = train_method
 
         # set initial conditions
         self.input_init = input_init.reshape(1, -1)
@@ -58,7 +61,8 @@ class PerfBoostController(nn.Module):
             dim_in=self.dim_in, dim_out=self.dim_out, dim_internal=dim_internal,
             dim_nl=dim_nl, initialization_std=initialization_std,
             internal_state_init=ren_internal_state_init,
-            posdef_tol=posdef_tol, contraction_rate_lb=contraction_rate_lb
+            posdef_tol=posdef_tol, contraction_rate_lb=contraction_rate_lb,
+            train_method=train_method
         ).to(device)
 
         # set number of trainable params
@@ -122,7 +126,9 @@ class PerfBoostController(nn.Module):
 
     def set_parameter(self, name, value):
         current_val = getattr(self.c_ren, name)
-        value = torch.nn.Parameter(value.reshape(current_val.shape))
+        value = value.reshape(current_val.shape)
+        if self.train_method=='empirical':
+            value = torch.nn.Parameter()
         setattr(self.c_ren, name, value)
         self.c_ren._update_model_param()    # update dependent params
 

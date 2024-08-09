@@ -29,7 +29,8 @@ class ContractiveREN(nn.Module):
     def __init__(
         self, dim_in: int, dim_out: int, dim_internal: int,
         dim_nl: int, internal_state_init = None, initialization_std: float = 0.5,
-        posdef_tol: float = 0.001, contraction_rate_lb: float = 1.0
+        posdef_tol: float = 0.001, contraction_rate_lb: float = 1.0,
+        train_method:str = 'empirical',
     ):
         """
         Args:
@@ -41,6 +42,7 @@ class ContractiveREN(nn.Module):
             internal_state_init (torch.Tensor or None, optional): Initial condition for the internal state. Defaults to 0 when set to None.
             epsilon (float, optional): Positive and negligible scalar to force positive definite matrices.
             contraction_rate_lb (float, optional): Lower bound on the contraction rate. Defaults to 1.
+            train_method (str): Training method. Defaults to empirical.
         """
         super().__init__()
 
@@ -52,6 +54,8 @@ class ContractiveREN(nn.Module):
 
         # set functionalities
         self.contraction_rate_lb = contraction_rate_lb
+        self.train_method = train_method
+        assert self.train_method in ['empirical', 'normflow', 'SVGD']
 
         # auxiliary elements
         self.epsilon = posdef_tol
@@ -148,8 +152,14 @@ class ContractiveREN(nn.Module):
         for training_param_name in self.training_param_names:  # name of one of the training params, e.g., X
             # read the defined shapes of the selected training param, e.g., X_shape
             shape = getattr(self, training_param_name + '_shape')
-            # define the selected param (e.g., self.X) as nn.Parameter
-            setattr(self, training_param_name, nn.Parameter((torch.randn(*shape) * initialization_std)))
+            # define the selected param (e.g., self.X)
+            param_val = torch.randn(*shape) * initialization_std
+            if self.train_method=='empirical':
+                # register as parameter
+                setattr(self, training_param_name, nn.Parameter(param_val))
+            else:
+                # register as buffer
+                self.register_buffer(training_param_name, param_val)
 
     # setters and getters
     def get_parameter_shapes(self):

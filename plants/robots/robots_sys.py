@@ -140,7 +140,5 @@ class RobotsSystem(torch.nn.Module):
                 u_log = torch.cat((u_log, u), 1)
 
         controller.reset()
-        if not train:
-            x_log, u_log = x_log.detach(), u_log.detach()
 
         return x_log, None, u_log

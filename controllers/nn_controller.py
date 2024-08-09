@@ -104,18 +104,24 @@ class NNController(torch.nn.Module):
         assert ind == len(vec)
 
     def get_parameters_as_vector(self):
-        vec = torch.Tensor([])
         # get params of the hidden layers
+        vec = None
         for i in range(1, self.n_layers + 1):
             layer = getattr(self, 'fc_%i'%(i))
             weight = getattr(layer, 'weight')
-            vec = torch.cat((vec, weight.flatten()) , 0)
+            if i==1:
+                vec = weight.flatten()
+            else:
+                vec = torch.cat((vec, weight.flatten()) , 0)
             bias = getattr(layer, 'bias')
             vec = torch.cat((vec, bias.flatten()) , 0)
         # get params of the output layer
         layer = getattr(self, 'out')
         weight = getattr(layer, 'weight')
-        vec = torch.cat((vec, weight.flatten()) , 0)
+        if vec is None: # no hidden layers
+            vec = weight.flatten()
+        else:
+            vec = torch.cat((vec, weight.flatten()), 0)
         bias = getattr(layer, 'bias')
         vec = torch.cat((vec, bias.flatten()) , 0)
 
