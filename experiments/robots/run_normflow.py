@@ -14,12 +14,12 @@ from utils.plot_functions import *
 from controllers import PerfBoostController, AffineController, NNController
 from loss_functions import RobotsLossMultiBatch
 from utils.assistive_functions import WrapLogger
+from inference_algs.distributions import GibbsPosterior
 
 # NEW
 import math
 from tqdm import tqdm
 import normflows as nf
-from inference_algs.distributions import GibbsPosterior
 from inference_algs.normflow_assist import GibbsWrapperNF
 
 BASE_IS_PRIOR = False
@@ -135,10 +135,11 @@ else:
 # ------------ 6. NEW: Posterior ------------
 epsilon = 0.1       # PAC holds with Pr >= 1-epsilon
 gibbs_lambda_star = (8*args.num_rollouts*math.log(1/epsilon))**0.5   # lambda for Gibbs
-logger.info('gibbs_lambda_star %f' % gibbs_lambda_star)
+gibbs_lambda = gibbs_lambda_star
+logger.info('gibbs_lambda: %.2f' % gibbs_lambda + ' (use lambda_*)' if gibbs_lambda == gibbs_lambda_star else '')
 # define target distribution
 gibbs_posteior = GibbsPosterior(
-    loss_fn=bounded_loss_fn, lambda_=gibbs_lambda_star, prior_dict=prior_dict,
+    loss_fn=bounded_loss_fn, lambda_=gibbs_lambda, prior_dict=prior_dict,
     num_ensemble_models=40, #TODO
     # attributes of the CL system
     controller=ctl_generic, sys=sys,

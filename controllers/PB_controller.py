@@ -80,7 +80,7 @@ class PerfBoostController(nn.Module):
         self.t = 0  # time
         self.last_input = self.input_init.detach().clone()
         self.last_output = self.output_init.detach().clone()
-        self.c_ren.x = self.c_ren.init_x    # reset the REN state to the initial value
+        self.c_ren.reset()    # reset the REN state to the initial value
 
     def forward(self, input_t: torch.Tensor):
         """
@@ -120,15 +120,15 @@ class PerfBoostController(nn.Module):
     def get_named_parameters(self):
         return self.c_ren.get_named_parameters()
 
-    def get_parameters_as_vector(self):
-        # TODO: implement without numpy
-        return np.concatenate([p.detach().clone().cpu().numpy().flatten() for p in self.c_ren.parameters()])
+    # # def get_parameters_as_vector(self):
+    # #     # TODO: implement without numpy
+    # #     return np.concatenate([p.detach().clone().cpu().numpy().flatten() for p in self.c_ren.parameters()])
 
     def set_parameter(self, name, value):
         current_val = getattr(self.c_ren, name)
         value = value.reshape(current_val.shape)
         if self.train_method=='empirical':
-            value = torch.nn.Parameter()
+            value = torch.nn.Parameter(value)
         setattr(self.c_ren, name, value)
         self.c_ren._update_model_param()    # update dependent params
 
@@ -137,6 +137,7 @@ class PerfBoostController(nn.Module):
             self.set_parameter(name, value)
 
     def set_parameters_as_vector(self, value):
+        # value is reshaped to the parameter shape
         idx = 0
         for name, shape in self.get_parameter_shapes().items():
             if len(shape) == 1:
@@ -147,17 +148,28 @@ class PerfBoostController(nn.Module):
                 raise NotImplementedError
             idx_next = idx + dim
             # select indx
-            if len(value.shape) == 1:
+            if value.ndim == 1:
                 value_tmp = value[idx:idx_next]
-            elif len(value.shape) == 2:
+            elif value.ndim == 2:
                 value_tmp = value[:, idx:idx_next]
             else:
                 raise AssertionError
             # set
-            with torch.no_grad():
-                self.set_parameter(name, value_tmp.reshape(shape))
+            if self.c_ren.train_method=='SVGD':
+                self.set_parameter(name, value_tmp)
+            elif self.c_ren.train_method=='empirical':
+                with torch.no_grad():
+                    self.set_parameter(name, value_tmp)
+            else:
+                raise NotImplementedError
             idx = idx_next
         assert idx_next == value.shape[-1]
 
     def __call__(self, *args, **kwargs):
         return self.forward(*args, **kwargs)
+
+    def parameters(self):
+        return list(self.get_named_parameters().values())
+
+    def parameters_as_vector(self):
+        return torch.cat(self.parameters(), dim=-1)

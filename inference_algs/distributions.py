@@ -40,60 +40,84 @@ class GibbsPosterior():
             copy.deepcopy(sys), copy.deepcopy(controller), random_seed=None
         ).to('meta')
 
+    # def _log_prob_likelihood(self, params, train_data):
+    #     """
+    #     Args:
+    #         params: of shape (param_batch_size, num_controller_params)
+    #     """
+    #     L = params.shape[0]
+
+    #     param_ind = 0
+    #     loss_val = None
+    #     for _ in range(math.ceil(L/self.num_ensemble_models)):
+    #         model_ind = 0
+
+    #         # set params to controllers
+    #         for _ in range(self.num_ensemble_models):
+    #             if param_ind==L:
+    #                 break
+    #             self.ensemble_models[model_ind].controller.set_parameters_as_vector(
+    #                 params[param_ind, :].reshape(1,-1)
+    #             )
+    #             model_ind += 1
+    #             param_ind += 1
+    #         used_ensemble_models = self.ensemble_models[0:model_ind]
+
+    #         # stack all ensemble models
+    #         ensemble_params_mdl, ensemble_buffers_mdl = stack_module_state(used_ensemble_models)
+
+    #         # rollout
+    #         xs, us = torch.vmap(
+    #             self.ensemble_functional_model,
+    #             in_dims=(0, 0, None)
+    #         )(ensemble_params_mdl, ensemble_buffers_mdl, train_data)
+
+    #         # compute loss
+    #         if isinstance(self.loss_fn, RobotsLoss) or isinstance(self.loss_fn, LQLossFH):
+    #             for ind in range(xs.shape[0]):
+    #                 loss_val_tmp = self.loss_fn.forward(xs[ind, :, :, :], us[ind, :, :, :])
+    #                 if loss_val is None:
+    #                     loss_val = [loss_val_tmp]
+    #                 else:
+    #                     loss_val.append(loss_val_tmp)
+    #         elif isinstance(self.loss_fn, RobotsLossMultiBatch) or isinstance(self.loss_fn, LQLossFHMultiBatch):
+    #             loss_val_tmp = self.loss_fn.forward(xs, us)
+    #             if loss_val is None:
+    #                 loss_val = [loss_val_tmp]
+    #             else:
+    #                 loss_val.append(loss_val_tmp)
+    #         else:
+    #             raise NotImplementedError
+
+    #     loss_val = torch.cat(loss_val)
+
+    #     assert param_ind==L
+    #     assert loss_val.shape[0]==L and loss_val.shape[1]==1, loss_val.shape
+
+    #     return loss_val
+
     def _log_prob_likelihood(self, params, train_data):
-        """
-        Args:
-            params: of shape (param_batch_size, num_controller_params)
-        """
+        assert len(params.shape)<3
+        if len(params.shape)==1:
+            params = params.reshape(1, -1)
         L = params.shape[0]
 
-        param_ind = 0
-        loss_val = None
-        for _ in range(math.ceil(L/self.num_ensemble_models)):
-            model_ind = 0
-
-            # set params to controllers
-            for _ in range(self.num_ensemble_models):
-                if param_ind==L:
-                    break
-                self.ensemble_models[model_ind].controller.set_parameters_as_vector(
-                    params[param_ind, :].reshape(1,-1)
-                )
-                model_ind += 1
-                param_ind += 1
-            used_ensemble_models = self.ensemble_models[0:model_ind]
-
-            # stack all ensemble models
-            ensemble_params_mdl, ensemble_buffers_mdl = stack_module_state(used_ensemble_models)
-
+        for l_tmp in range(L):
+            # set params to controller
+            cl_system = self.generic_cl_system
+            cl_system.controller.set_parameters_as_vector(
+                params[l_tmp, :].reshape(1,-1)
+            )
             # rollout
-            xs, us = torch.vmap(
-                self.ensemble_functional_model,
-                in_dims=(0, 0, None)
-            )(ensemble_params_mdl, ensemble_buffers_mdl, train_data)
-
+            xs, _, us = cl_system.rollout(train_data)
             # compute loss
-            if isinstance(self.loss_fn, RobotsLoss) or isinstance(self.loss_fn, LQLossFH):
-                for ind in range(xs.shape[0]):
-                    loss_val_tmp = self.loss_fn.forward(xs[ind, :, :, :], us[ind, :, :, :])
-                    if loss_val is None:
-                        loss_val = [loss_val_tmp]
-                    else:
-                        loss_val.append(loss_val_tmp)
-            elif isinstance(self.loss_fn, RobotsLossMultiBatch) or isinstance(self.loss_fn, LQLossFHMultiBatch):
-                loss_val_tmp = self.loss_fn.forward(xs, us)
-                if loss_val is None:
-                    loss_val = [loss_val_tmp]
-                else:
-                    loss_val.append(loss_val_tmp)
+            loss_val_tmp = self.loss_fn.forward(xs, us)
+            if l_tmp==0:
+                loss_val = [loss_val_tmp]
             else:
-                raise NotImplementedError
-
+                loss_val.append(loss_val_tmp)
         loss_val = torch.cat(loss_val)
-
-        assert param_ind==L
-        assert loss_val.shape[0]==L and loss_val.shape[1]==1, loss_val.shape
-
+        assert loss_val.shape[0]==L and loss_val.shape[1]==1
         return loss_val
 
     def log_prob(self, params, train_data):
@@ -156,7 +180,7 @@ class GibbsPosterior():
         self._param_dists = OrderedDict()
         # ------- set prior -------
         # set prior for REN controller
-        if isinstance(self.generic_cl_system.controller, PerfBoostController):
+        if self.generic_cl_system.controller.__class__.__name__=='PerfBoostController':
             for name, shape in self.generic_cl_system.controller.get_parameter_shapes().items():
                 nelement = torch.empty(*shape).nelement()   # number of total elements in the tensor
                 # Gaussian prior
@@ -176,7 +200,7 @@ class GibbsPosterior():
                 # set dist
                 self._param_dist(name, dist.to_event(1))
         # set prior for NN controller
-        elif isinstance(self.generic_cl_system.controller, NNController):
+        elif self.generic_cl_system.controller.__class__.__name__ == 'NNController':
             # check if prior is provided
             for name in ['weight', 'bias']:
                 if not name+'_loc' in prior_dict.keys():
@@ -223,7 +247,7 @@ class GibbsPosterior():
                     raise NotImplementedError
                 # set dist
                 self._param_dist('out.'+name, dist.to_event(1))
-        elif isinstance(self.generic_cl_system.controller, AffineController):
+        elif self.generic_cl_system.controller.__class__.__name__ == 'AffineController':
             for name, shape in self.generic_cl_system.controller.parameter_shapes().items():
                 # Gaussian prior
                 if prior_dict['type_'+name[0]].startswith('Gaussian'):

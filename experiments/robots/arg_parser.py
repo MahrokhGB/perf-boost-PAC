@@ -20,7 +20,7 @@ def argument_parser():
     parser.add_argument('--linearize-plant', type=bool, default=False, help='Linearize plant or not. Default is False.')
 
     # controller
-    parser.add_argument('--cont-type', type=str, default='Affine', help='Controller type. Can be Affine or PerfBoost. Default is Affine.')
+    parser.add_argument('--cont-type', type=str, default='Affine', help='Controller type. Can be Affine, NN, or PerfBoost. Default is Affine.')
     parser.add_argument('--cont-init-std', type=float, default=0.1 , help='Initialization std for controller params. Default is 0.1.')
     parser.add_argument('--dim-internal', type=int, default=8, help='Dimension of the internal state of the controller. Adjusts the size of the linear part of REN. Default is 8.')
     parser.add_argument('--dim-nl', type=int, default=8, help='size of the non-linear part of REN. Default is 8.')
@@ -85,8 +85,10 @@ def print_args(args):
 
     msg += '\n[INFO] Plant: spring constant: %.2f' % args.spring_const + ' -- use linearized plant: ' + str(args.linearize_plant)
 
-    msg += '\n[INFO] Controller: dimension of the internal state: %i' % args.dim_internal
-    msg += ' -- dim_nl: %i' % args.dim_nl + ' -- cont_init_std: %.2f'% args.cont_init_std
+    msg += '\n[INFO] Controller: cont_init_std: %.2f'% args.cont_init_std
+    if args.cont_type=='PerfBoost':
+        msg += ' -- dimension of the internal state: %i' % args.dim_internal
+        msg += ' -- dim_nl: %i' % args.dim_nl
 
     msg += '\n[INFO] Loss:  alpha_u: %.6f' % args.alpha_u
     msg += ' -- alpha_col: %.f' % args.alpha_col if args.col_av else ' -- no collision avoidance'

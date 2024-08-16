@@ -62,10 +62,10 @@ class ContractiveREN(nn.Module):
 
         # initialize internal state
         if internal_state_init is None:
-            self.x = torch.zeros(1, 1, self.dim_internal)
+            self.register_buffer('x', torch.zeros(1, 1, self.dim_internal))
         else:
             assert isinstance(internal_state_init, torch.Tensor)
-            self.x = internal_state_init.reshape(1, 1, self.dim_internal)
+            self.register_buffer('x', internal_state_init.reshape(1, 1, self.dim_internal))
         self.register_buffer('init_x', self.x.detach().clone())
 
         # define matrices shapes
@@ -173,3 +173,6 @@ class ContractiveREN(nn.Module):
             (name, getattr(self, name)) for name in self.training_param_names
         )
         return param_dict
+
+    def reset(self):
+        self.x = self.init_x.detach().clone()
