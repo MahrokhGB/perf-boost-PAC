@@ -10,9 +10,9 @@ class AffineController(torch.nn.Module):
         self.train_method = train_method
 
         # set number of trainable params
-        self.num_params = weight.nelement()
-        if not bias is None:
-            self.num_params += bias.nelement()
+        self.weight_nelement = weight.nelement()
+        self.bias_nelement = 0 if bias is None else bias.nelement()
+        self.num_params = self.weight_nelement + self.bias_nelement
 
         # weight is a tensor of shape = (in_dim, state_dim)
         weight = to_tensor(weight)
@@ -42,20 +42,28 @@ class AffineController(torch.nn.Module):
 
     def forward(self, what):
         # what must be of shape (batch_size, state_dim, self.in_dim)
-        # assert what.shape[1:]==torch.Size([self.state_dim, self.in_dim]), what.shape
-        if what.shape[-1]==self.in_dim:
-            what = what.transpose(-1,-2)
-        return torch.matmul(self.weight, what)+self.bias
+        return torch.matmul(self.weight, what.transpose(-1,-2))+self.bias
 
     def set_parameters_as_vector(self, vec):
         # last element is bias, the rest is weight
-        vec = vec.flatten()
-        self.set_parameter('weight', vec[:self.weight.nelement()])
-        self.set_parameter('bias', vec[self.weight.nelement():])
+        # check if is batched
+        if vec.ndim==self.num_params:
+            vec = vec.flatten()
+            new_weight = vec[:self.weight_nelement]
+            new_bias = vec[self.weight_nelement:]
+        else:
+            new_weight = vec[:, :self.weight_nelement]
+            new_bias = vec[:, self.weight_nelement:]
+
+        self.set_parameter('weight', new_weight)
+        self.set_parameter('bias', new_bias)
 
     def set_parameter(self, name, value):
         current_val = getattr(self, name)
-        value = value.reshape(current_val.shape)
+        if value.nelement() == current_val.nelement():
+            value = value.reshape(current_val.shape)
+        else:
+            value = value.reshape(value.shape[0], *current_val.shape)
         if self.train_method=='empirical':
             value = torch.nn.Parameter(value)
         setattr(self, name, value)
@@ -74,3 +82,6 @@ class AffineController(torch.nn.Module):
             (name, getattr(self, name)) for name in ['weight', 'bias']
         )
         return param_dict
+
+    def get_parameters_as_vector(self):
+        return [self.weight.flatten(), self.bias.flatten()]

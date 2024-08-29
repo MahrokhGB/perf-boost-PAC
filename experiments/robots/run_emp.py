@@ -70,7 +70,7 @@ elif args.cont_type=='Affine':
     ).to(device)
 elif args.cont_type=='NN':
     ctl_generic = NNController(
-        in_dim=sys.state_dim, out_dim=sys.in_dim, layer_sizes=[],
+        in_dim=sys.state_dim, out_dim=sys.in_dim, layer_sizes=args.layer_sizes,
         train_method=TRAIN_METHOD
     ).to(device)
 else:
@@ -141,6 +141,7 @@ for epoch in range(1+args.epochs):
     # print info
     if epoch%args.log_epoch == 0:
         msg = 'Epoch: %i --- train loss: %.2f'% (epoch, loss)
+        print(ctl_generic.get_parameters_as_vector()[0:10])
 
         if args.return_best:
             # rollout the current controller on the valid data

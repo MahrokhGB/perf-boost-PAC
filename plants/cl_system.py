@@ -16,16 +16,10 @@ class CLSystem(torch.nn.Module):
         self.controller=controller
 
     def rollout(self, data):
-        assert len(data.shape)==3
-        (S, T, state_dim) = data.shape
-        assert state_dim==self.sys.state_dim
-
         xs, ys, us= self.sys.rollout(
             controller=self.controller,
             data=data
         )
-
-        # assert xs.shape==(S, T, state_dim), xs.shape
         return xs, ys, us
 
     def forward(self, data):

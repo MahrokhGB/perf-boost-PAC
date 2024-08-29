@@ -1,9 +1,8 @@
 import torch
-import normflows as nf
 
 def eval_norm_flow(nfm, sys, ctl_generic, data, num_samples, loss_fn, count_collisions):
     with torch.no_grad():
-        if isinstance(nfm, nf.NormalizingFlow):
+        if nfm.__class__.__name__=='NormalizingFlow':
             z, _ = nfm.sample(num_samples)
         else:
             z = nfm.sample(num_samples)

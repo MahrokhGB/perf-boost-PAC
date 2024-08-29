@@ -1,6 +1,15 @@
 import torch
 from collections import OrderedDict
 
+class batched_linear_layer(torch.nn.Linear):
+    def __init__(self, in_features, out_features, bias=True):
+        super().__init__(in_features, out_features, bias)
+
+    def forward(self, input):
+        assert not input.isinf().any()
+        return torch.matmul(input, self.weight.transpose(-1,-2)) + self.bias.unsqueeze(dim=-2)
+
+
 class NNController(torch.nn.Module):
     def __init__(self, train_method, in_dim, out_dim, layer_sizes, nonlinearity_hidden=torch.tanh, nonlinearity_output=None):
         super(NNController, self).__init__()
@@ -12,11 +21,21 @@ class NNController(torch.nn.Module):
 
         self.n_layers = len(layer_sizes)
         self.layers = []
+        self.weight_shape = [None]*(self.n_layers+1)
+        self.bias_shape = [None]*(self.n_layers+1)
         prev_size = in_dim
+        # set up hidden layers
         for i, size in enumerate(layer_sizes):
-            setattr(self, 'fc_%i'%(i+1), torch.nn.Linear(prev_size, size))
+            layer = batched_linear_layer(prev_size, size)
+            setattr(self, 'fc_%i'%(i+1), layer)
             prev_size = size
-        setattr(self, 'out', torch.nn.Linear(prev_size, self.out_dim))
+            self.weight_shape[i] = layer.weight.shape
+            self.bias_shape[i] = layer.bias.shape
+        # set up the output layer
+        layer = batched_linear_layer(prev_size, self.out_dim)
+        setattr(self, 'out', layer)
+        self.weight_shape[self.n_layers] = layer.weight.shape
+        self.bias_shape[self.n_layers] = layer.bias.shape
 
         # set number of trainable params
         self.num_params = sum([p.nelement() for p in self.parameters()])
@@ -40,8 +59,8 @@ class NNController(torch.nn.Module):
 
     def forward(self, x):
         output = x
-        for i in range(1, self.n_layers+1):
-            output = getattr(self, 'fc_%i'%i)(output)
+        for i in range(self.n_layers):
+            output = getattr(self, 'fc_%i'%(i+1))(output)
             if self.nonlinearity_hidden is not None:
                 output = self.nonlinearity_hidden(output)
         output = getattr(self, 'out')(output)
@@ -49,31 +68,34 @@ class NNController(torch.nn.Module):
             output = self.nonlinearity_output(output)
         return output
 
-    def forward_parametrized(self, x, params):
-        output = x
-        param_idx = 0
-        for i in range(1, self.n_layers + 1):
-            output = torch.nn.functional.linear(output, params[param_idx], params[param_idx+1])
-            output = self.nonlinearlity(output)
-            param_idx += 2
-        output = torch.nn.functional.linear(output, params[param_idx], params[param_idx+1])
-        return output
-
     def set_parameters_as_vector(self, vec):
-        vec = vec.flatten()
-        ind=0
+        # flatten vec if not batched
+        if vec.nelement()==self.num_params:
+            vec = vec.flatten()
+            batched = False
+        else:
+            batched = True
 
-        # --- set params of the hidden layers ---
-        for i in range(1, self.n_layers + 1):
-            layer = getattr(self, 'fc_%i'%(i))
-            # get old weight and bias
-            old_weight = getattr(layer, 'weight')
-            old_bias = getattr(layer,'bias')
+        # --- set params of the layers ---
+        ind=0
+        for i in range(self.n_layers + 1):
+            layer = getattr(self, 'out') if i==self.n_layers else getattr(self, 'fc_%i'%(i+1))
             # get new weight and bias
-            new_weight = vec[ind:ind+old_weight.nelement()].reshape(old_weight.shape)
-            ind = ind+old_weight.nelement()
-            new_bias = vec[ind:ind+old_bias.nelement()].reshape(old_bias.shape)
-            ind = ind+old_bias.nelement()
+            if not batched:
+                ind_nxt = ind+torch.empty(self.weight_shape[i]).nelement()
+                new_weight = vec[ind:ind_nxt].reshape(self.weight_shape[i])
+                ind = ind_nxt
+                ind_nxt = ind+torch.empty(self.bias_shape[i]).nelement()
+                new_bias = vec[ind:ind_nxt].reshape(self.bias_shape[i])
+                ind = ind_nxt
+            else:
+                ind_nxt = ind+torch.empty(self.weight_shape[i]).nelement()
+                new_weight = vec[:, ind:ind_nxt].reshape(vec.shape[0], *self.weight_shape[i])
+                ind = ind_nxt
+                ind_nxt = ind+torch.empty(self.bias_shape[i]).nelement()
+                new_bias = vec[:, ind:ind_nxt].reshape(vec.shape[0], *self.bias_shape[i])
+                ind = ind_nxt
+
             # convert to param if needed
             if self.train_method == 'empirical':
                 new_weight = torch.nn.Parameter(new_weight)
@@ -82,26 +104,11 @@ class NNController(torch.nn.Module):
             setattr(layer, 'weight', new_weight)
             setattr(layer, 'bias', new_bias)
 
-        # --- set params of the output layer ---
-        layer = getattr(self, 'out')
-        # get old weight and bias
-        old_weight = getattr(layer, 'weight')
-        old_bias = getattr(layer, 'bias')
-        # get new weight and bias
-        new_weight = vec[ind:ind+old_weight.nelement()].reshape(old_weight.shape)
-        ind = ind+old_weight.nelement()
-        new_bias = vec[ind:ind+old_bias.nelement()].reshape(old_bias.shape)
-        ind = ind+old_bias.nelement()
-        # convert to param if needed
-        if self.train_method == 'empirical':
-            new_weight = torch.nn.Parameter(new_weight)
-            new_bias = torch.nn.Parameter(new_bias)
-        # set new weight and bias
-        setattr(layer, 'weight', new_weight)
-        setattr(layer, 'bias', new_bias)
-
         # --- check all params are used ---
-        assert ind == len(vec)
+        if not batched:
+            assert ind == len(vec)
+        else:
+            assert ind == vec.shape[-1]
 
     def get_parameters_as_vector(self):
         # get params of the hidden layers

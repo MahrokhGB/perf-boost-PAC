@@ -1,4 +1,4 @@
-import torch
+import torch, time
 import torch.nn as nn
 import numpy as np
 
@@ -113,6 +113,7 @@ class NormalizingFlow(nn.Module):
         Returns:
           Estimate of the reverse KL divergence averaged over latent samples
         """
+        # t = time.time()
         z, log_q_ = self.q0(num_samples)
         log_q = torch.zeros_like(log_q_)
         log_q += log_q_
@@ -128,16 +129,19 @@ class NormalizingFlow(nn.Module):
                 log_q += log_det
             log_q += self.q0.log_prob(z_)
             utils.set_requires_grad(self, True)
-        assert z.requires_grad
-        assert not z.is_leaf
+        # print('log_q', time.time()-t)
+        # assert z.requires_grad
+        # assert not z.is_leaf
+        # t = time.time()
         log_p = self.p.log_prob(z)
+        # print('log_p time', time.time()-t)
         log_q_mean = torch.mean(log_q)
         log_p_mean = torch.mean(log_p)
         self.beta_hist.append(beta)
         self.log_q_mean_hist.append(log_q_mean.detach())
         self.log_p_mean_hist.append(log_p_mean.detach())
-        assert log_p_mean.requires_grad
-        assert not log_p_mean.is_leaf
+        # assert log_p_mean.requires_grad
+        # assert not log_p_mean.is_leaf
         return - log_p_mean
         # return log_q_mean - beta * log_p_mean
 

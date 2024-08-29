@@ -63,7 +63,7 @@ class RobotsSystem(torch.nn.Module):
     def A_nonlin(self, x):
         assert not self.linear_plant
         A3 = torch.norm(
-            x.view(-1, 2 * self.n_agents, 2) * self.mask, dim=-1, keepdim=True
+            x.view(*x.shape[:-2], 2 * self.n_agents, 2) * self.mask, dim=-1, keepdim=True
         )           # shape = (batch_size, 2 * n_agents, 1)
         A3 = torch.kron(
             A3, torch.ones(2, 1, device=A3.device)
@@ -85,14 +85,12 @@ class RobotsSystem(torch.nn.Module):
         Returns:
             next state of the noise-free dynamics.
         """
-        x = x.view(-1, 1, self.state_dim)
-        u = u.view(-1, 1, self.in_dim)
-        if self.linear_plant:
-            # x is batched but A is not => can use F.linear to compute xA^T
-            f = F.linear(x - self.xbar, self.A_lin) + F.linear(u, self.B) + self.xbar
-        else:
-            # A depends on x, hence is batched. perform batched matrix multiplication
-            f = torch.bmm(x - self.xbar, self.A_nonlin(x).transpose(1,2)) + F.linear(u, self.B) + self.xbar
+        x = x.view(*x.shape[:-2], 1, self.state_dim)
+        u = u.view(*u.shape[:-2], 1, self.in_dim)
+        A = self.A_lin if self.linear_plant else self.A_nonlin(x)
+        xAT = torch.matmul(x - self.xbar, A.transpose(-1,-2))
+        uBT = torch.matmul(u, self.B.transpose(-1,-2))
+        f = xAT + uBT + self.xbar
         return f    # shape = (batch_size, 1, state_dim)
 
     def forward(self, t, x, u, w):
@@ -107,7 +105,7 @@ class RobotsSystem(torch.nn.Module):
         Returns:
             next state.
         """
-        return self.noiseless_forward(t, x, u) + w.view(-1, 1, self.state_dim)
+        return self.noiseless_forward(t, x, u) + w.view(*w.shape[:-2], 1, self.state_dim)
 
     # simulation
     def rollout(self, controller, data):
@@ -125,19 +123,18 @@ class RobotsSystem(torch.nn.Module):
 
         # init
         controller.reset()
-        x = self.x_init.detach().clone().repeat(data.shape[0], 1, 1)
-        u = self.u_init.detach().clone().repeat(data.shape[0], 1, 1)
+        x = self.x_init.detach().clone().repeat(*data.shape[:-2], 1, 1)
+        u = self.u_init.detach().clone().repeat(*data.shape[:-2], 1, 1)
 
         # Simulate
-        for t in range(data.shape[1]):
-            x = self.forward(t=t, x=x, u=u, w=data[:, t:t+1, :])    # shape = (batch_size, 1, state_dim)
+        for t in range(data.shape[-2]):
+            x = self.forward(t=t, x=x, u=u, w=data.select(dim=-2, index=t).unsqueeze(-2))    # shape = (batch_size, 1, state_dim)
             u = controller(x)                                       # shape = (batch_size, 1, in_dim)
-
             if t == 0:
                 x_log, u_log = x, u
             else:
-                x_log = torch.cat((x_log, x), 1)
-                u_log = torch.cat((u_log, u), 1)
+                x_log = torch.cat((x_log, x), -2)
+                u_log = torch.cat((u_log, u), -2)
 
         controller.reset()
 

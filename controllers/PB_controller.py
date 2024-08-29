@@ -93,7 +93,7 @@ class PerfBoostController(nn.Module):
         Return:
             y_out (torch.Tensor): Output with (batch_size, 1, self.dim_out).
         """
-
+        # assert self.c_ren.X.requires_grad
         # apply noiseless forward to get noise less input (noise less state of the plant)
         u_noiseless = self.noiseless_forward(
             t=self.t,
@@ -126,7 +126,10 @@ class PerfBoostController(nn.Module):
 
     def set_parameter(self, name, value):
         current_val = getattr(self.c_ren, name)
-        value = value.reshape(current_val.shape)
+        if current_val.nelement()==value.nelement():
+            value = value.reshape(current_val.shape)
+        else:
+            value = value.reshape(value.shape[0], *current_val.shape)
         if self.train_method=='empirical':
             value = torch.nn.Parameter(value)
         setattr(self.c_ren, name, value)
@@ -142,20 +145,24 @@ class PerfBoostController(nn.Module):
         for name, shape in self.get_parameter_shapes().items():
             if len(shape) == 1:
                 dim = shape
-            elif len(shape) == 2:
-                dim = shape[0]*shape[1]
             else:
-                raise NotImplementedError
+                dim = shape[-1]*shape[-2]
+            # elif len(shape) == 2:
+            #     dim = shape[0]*shape[1]
+            # else:
+            #     raise NotImplementedError
             idx_next = idx + dim
             # select indx
             if value.ndim == 1:
                 value_tmp = value[idx:idx_next]
             elif value.ndim == 2:
                 value_tmp = value[:, idx:idx_next]
+            elif value.ndim == 3:
+                value_tmp = value[:, :, idx:idx_next]
             else:
                 raise AssertionError
             # set
-            if self.c_ren.train_method=='SVGD':
+            if self.c_ren.train_method in ['SVGD', 'normflow']:
                 self.set_parameter(name, value_tmp)
             elif self.c_ren.train_method=='empirical':
                 with torch.no_grad():
@@ -173,3 +180,6 @@ class PerfBoostController(nn.Module):
 
     def parameters_as_vector(self):
         return torch.cat(self.parameters(), dim=-1)
+
+    def get_parameters_as_vector(self):
+        return self.c_ren.get_parameters_as_vector()

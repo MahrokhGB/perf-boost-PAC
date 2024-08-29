@@ -171,7 +171,6 @@ logger.info(msg)
 gibbs_posteior = GibbsPosterior(
     loss_fn=bounded_loss_fn, lambda_=gibbs_lambda_star,
     prior_dict=prior_dict,
-    num_ensemble_models=40, #TODO
     # attributes of the CL system
     controller=ctl_generic, sys=sys,
     # misc

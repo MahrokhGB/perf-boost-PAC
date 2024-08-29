@@ -1,4 +1,4 @@
-import sys, os, logging, torch
+import sys, os, logging, torch, time
 from datetime import datetime
 from torch.utils.data import DataLoader
 
@@ -19,6 +19,7 @@ from inference_algs.distributions import GibbsPosterior
 # NEW
 import math
 from tqdm import tqdm
+from inference_algs.normflow_assist.mynf import NormalizingFlow
 import normflows as nf
 from inference_algs.normflow_assist import GibbsWrapperNF
 
@@ -83,7 +84,7 @@ elif args.cont_type=='Affine':
     )
 elif args.cont_type=='NN':
     ctl_generic = NNController(
-        in_dim=sys.state_dim, out_dim=sys.in_dim, layer_sizes=[],
+        in_dim=sys.state_dim, out_dim=sys.in_dim, layer_sizes=args.layer_sizes,
         train_method=TRAIN_METHOD
     )
 else:
@@ -118,6 +119,7 @@ original_loss_fn = RobotsLossMultiBatch(
 
 # ------------ 5. NEW: Prior ------------
 if args.cont_type in ['Affine', 'NN']:
+    training_param_names = ['weight', 'bias']
     prior_dict = {
         'type':'Gaussian', 'type_w':'Gaussian',
         'type_b':'Gaussian_biased',
@@ -140,7 +142,6 @@ logger.info('gibbs_lambda: %.2f' % gibbs_lambda + ' (use lambda_*)' if gibbs_lam
 # define target distribution
 gibbs_posteior = GibbsPosterior(
     loss_fn=bounded_loss_fn, lambda_=gibbs_lambda, prior_dict=prior_dict,
-    num_ensemble_models=40, #TODO
     # attributes of the CL system
     controller=ctl_generic, sys=sys,
     # misc
@@ -152,7 +153,6 @@ target = GibbsWrapperNF(
     target_dist=gibbs_posteior, train_dataloader=train_dataloader,
     prop_scale=torch.tensor(6.0), prop_shift=torch.tensor(-3.0)
 )
-
 # ****** INIT NORMFLOWS ******
 num_flows = 16
 from_type = 'Planar'
@@ -171,16 +171,18 @@ q0 = nf.distributions.DiagGaussian(num_params)
 # base distribution same as the prior
 if BASE_IS_PRIOR:
     state_dict = q0.state_dict()
-    state_dict['loc'] = torch.tensor(
-        [prior_dict['weight_loc'], prior_dict['bias_loc']]
-    ).reshape(1, -1)
-    state_dict['log_scale'] = torch.log(torch.tensor(
-        [prior_dict['weight_scale'], prior_dict['bias_scale']]
-    )).reshape(1, -1)
+    state_dict['loc'] = gibbs_posteior.prior.mean().reshape(1, -1)
+    # torch.tensor(
+        # [prior_dict[name+'_loc'] for name in training_param_names]
+    # ).reshape(1, -1)
+    state_dict['log_scale'] = gibbs_posteior.prior.stddev().reshape(1, -1)
+    # torch.log(torch.tensor(
+    #     [prior_dict[name+'_scale'] for name in training_param_names]
+    # )).reshape(1, -1)
     q0.load_state_dict(state_dict)
 
 # set up normflow
-nfm = nf.NormalizingFlow(q0=q0, flows=flows, p=target)
+nfm = NormalizingFlow(q0=q0, flows=flows, p=target) # NOTE: set back to nf.NormalizingFlow
 nfm.to(device)  # Move model on GPU if available
 
 msg = '\n[INFO] Norm flows setup: num transformations: %i' % num_flows
@@ -188,46 +190,46 @@ msg += ' -- flow type: ' + str(type(flows[0])) + ' -- base dist: ' + str(type(q0
 logger.info(msg)
 
 # plot closed-loop trajectories by sampling controller from untrained nfm
-logger.info('Plotting closed-loop trajectories before training the normalizing flow model.')
-with torch.no_grad():
-    z, _ = nfm.sample(1)
-    ctl_generic.set_parameters_as_vector(z[0, :])
-    x_log, _, u_log = sys.rollout(ctl_generic, plot_data)
-plot_trajectories(
-    x_log[0, :, :], # remove extra dim due to batching
-    dataset.xbar, sys.n_agents, text="CL - before training", T=t_ext,
-    save_folder=save_folder, filename='CL_init.pdf',
-    obstacle_centers=bounded_loss_fn.obstacle_centers,
-    obstacle_covs=bounded_loss_fn.obstacle_covs
-)
-# evaluate on the train data
-num_samples_nf_eval = 40 #TODO
-logger.info('\n[INFO] evaluating the base distribution on %i training rollouts.' % args.num_rollouts)
-train_loss, train_num_col = eval_norm_flow(
-    nfm=q0, sys=sys, ctl_generic=ctl_generic, data=train_data,
-    num_samples=num_samples_nf_eval, loss_fn=bounded_loss_fn, count_collisions=args.col_av
-)
-msg = 'Average loss: %.4f' % train_loss
-if args.col_av:
-    msg += ' -- Average number of collisions = %i' % train_num_col
-logger.info(msg)
-# evaluate on the train data
-logger.info('\n[INFO] evaluating the initial flow on %i training rollouts.' % args.num_rollouts)
-train_loss, train_num_col = eval_norm_flow(
-    nfm=nfm, sys=sys, ctl_generic=ctl_generic, data=train_data,
-    num_samples=num_samples_nf_eval, loss_fn=bounded_loss_fn, count_collisions=args.col_av
-)
-msg = 'Average loss: %.4f' % train_loss
-if args.col_av:
-    msg += ' -- Average number of collisions = %i' % train_num_col
-logger.info(msg)
+# logger.info('Plotting closed-loop trajectories before training the normalizing flow model.')
+# with torch.no_grad():
+#     z, _ = nfm.sample(1)
+#     ctl_generic.set_parameters_as_vector(z[0, :])
+#     x_log, _, u_log = sys.rollout(ctl_generic, plot_data)
+# plot_trajectories(
+#     x_log[0, :, :], # remove extra dim due to batching
+#     dataset.xbar, sys.n_agents, text="CL - before training", T=t_ext,
+#     save_folder=save_folder, filename='CL_init.pdf',
+#     obstacle_centers=bounded_loss_fn.obstacle_centers,
+#     obstacle_covs=bounded_loss_fn.obstacle_covs
+# )
+# # evaluate on the train data
+# num_samples_nf_eval = 40 #TODO
+# logger.info('\n[INFO] evaluating the base distribution on %i training rollouts.' % args.num_rollouts)
+# train_loss, train_num_col = eval_norm_flow(
+#     nfm=q0, sys=sys, ctl_generic=ctl_generic, data=train_data,
+#     num_samples=num_samples_nf_eval, loss_fn=bounded_loss_fn, count_collisions=args.col_av
+# )
+# msg = 'Average loss: %.4f' % train_loss
+# if args.col_av:
+#     msg += ' -- Average number of collisions = %i' % train_num_col
+# logger.info(msg)
+# # evaluate on the train data
+# logger.info('\n[INFO] evaluating the initial flow on %i training rollouts.' % args.num_rollouts)
+# train_loss, train_num_col = eval_norm_flow(
+#     nfm=nfm, sys=sys, ctl_generic=ctl_generic, data=train_data,
+#     num_samples=num_samples_nf_eval, loss_fn=bounded_loss_fn, count_collisions=args.col_av
+# )
+# msg = 'Average loss: %.4f' % train_loss
+# if args.col_av:
+#     msg += ' -- Average number of collisions = %i' % train_num_col
+# logger.info(msg)
 
 # ****** TRAIN NORMFLOWS ******
 # Train model
-num_samples_nf_train = 400
-num_samples_nf_eval = 100
+num_samples_nf_train = 100
+num_samples_nf_eval = 100 # TODO
 anneal_iter = int(args.epochs/2)
-annealing = False # NOTE
+annealing = True # NOTE
 weight_decay = 0
 msg = '[INFO] Training setup: annealing: ' + str(annealing)
 msg += ' -- annealing iter: %i' % anneal_iter if annealing else ''
@@ -237,29 +239,31 @@ logger.info(msg)
 nf_loss_hist = [None]*args.epochs
 
 optimizer = torch.optim.Adam(nfm.parameters(), lr=args.lr, weight_decay=weight_decay)
-param_history = list(nfm.parameters()).detach().clone().numpy().reshape(1,-1)
+# param_history = list(nfm.parameters()).detach().clone().numpy().reshape(1,-1)
 with tqdm(range(args.epochs)) as t:
     for it in t:
         optimizer.zero_grad()
+        t_now = time.time()
         if annealing:
-            # t_now = time.time()
             nf_loss = nfm.reverse_kld(num_samples_nf_train, beta=min([1., 0.01 + it / anneal_iter]))
-            # print('reverse KLD time ', time.time()-t_now)
         else:
             nf_loss = nfm.reverse_kld(num_samples_nf_train)
+        # print('reverse KLD time ', time.time()-t_now)
+        t_now = time.time()
         nf_loss.backward()
-        for name, param in nfm.named_parameters():
-            if not torch.isfinite(param.grad).all():
-                logger.info('grad for ' + name + 'is infinite.')
-            if param.isnan().any():
-                logger.info(param, ' is nan in iter ', it)
+        # print('backward time ', time.time()-t_now)
+        # for name, param in nfm.named_parameters():
+        #     if not torch.isfinite(param.grad).all():
+        #         logger.info('grad for ' + name + 'is infinite.')
+        #     if param.isnan().any():
+        #         logger.info(param, ' is nan in iter ', it)
         optimizer.step()
 
-        # add to history
-        param_history = np.concatenate(
-            (param_history, list(nfm.parameters()).detach().clone().numpy().reshape(1,-1)),
-            axis=0
-        )
+        # # add to history
+        # param_history = np.concatenate(
+        #     (param_history, list(nfm.parameters()).detach().clone().numpy().reshape(1,-1)),
+        #     axis=0
+        # )
 
         nf_loss_hist[it] = nf_loss.to('cpu').data.numpy()
 
@@ -269,14 +273,15 @@ with tqdm(range(args.epochs)) as t:
             with torch.no_grad():
                 z, _ = nfm.sample(num_samples_nf_eval)
                 z_mean = torch.mean(z, axis=0).reshape(1, -1)
+                print(z_mean[0,0:10])
                 lpl = target.target_dist._log_prob_likelihood(params=z, train_data=train_data)
-                lpl_mean = target.target_dist._log_prob_likelihood(params=z_mean, train_data=train_data)
+                # lpl_mean = target.target_dist._log_prob_likelihood(params=z_mean, train_data=train_data)
 
             # log nf loss
             elapsed = t.format_dict['elapsed']
             elapsed_str = t.format_interval(elapsed)
             msg = 'Iter %i' % (it+1) + ' --- elapsed time: ' + elapsed_str  + ' --- norm flow loss: %f'  % nf_loss.item()
-            msg += ' --- train loss %f' % torch.mean(lpl) + ' --- train loss of mean %f' % torch.mean(lpl_mean)
+            msg += ' --- train loss %f' % torch.mean(lpl) #+ ' --- train loss of mean %f' % torch.mean(lpl_mean)
             logger.info(msg)
 
             # save nf model
@@ -288,24 +293,24 @@ with tqdm(range(args.epochs)) as t:
             plt.legend()
             plt.savefig(os.path.join(save_folder, 'loss.pdf'))
             plt.show()
-            # plot param history
-            plt.figure(figsize=(10, 10))
-            for param_num in range(num_params):
-                plt.plot(nf_loss_hist[:, param_num], label='param '+str(param_num))
-            plt.legend()
-            plt.savefig(os.path.join(save_folder, 'param.pdf'))
-            plt.show()
+            # # plot param history
+            # plt.figure(figsize=(10, 10))
+            # for param_num in range(num_params):
+            #     plt.plot(nf_loss_hist[:, param_num], label='param '+str(param_num))
+            # plt.legend()
+            # plt.savefig(os.path.join(save_folder, 'param.pdf'))
+            # plt.show()
             # plot closed_loop
-            with torch.no_grad():
-                ctl_generic.set_parameters_as_vector(z_mean)
-                x_log, _, u_log = sys.rollout(ctl_generic, plot_data)
-            plot_trajectories(
-                x_log[0, :, :], # remove extra dim due to batching
-                dataset.xbar, sys.n_agents, text="CL - "+name, T=t_ext,
-                save_folder=save_folder, filename='CL_'+name+'.pdf',
-                obstacle_centers=bounded_loss_fn.obstacle_centers,
-                obstacle_covs=bounded_loss_fn.obstacle_covs
-            )
+            # with torch.no_grad():
+            #     ctl_generic.set_parameters_as_vector(z_mean)
+            #     x_log, _, u_log = sys.rollout(ctl_generic, plot_data)
+            # plot_trajectories(
+            #     x_log[0, :, :], # remove extra dim due to batching
+            #     dataset.xbar, sys.n_agents, text="CL - "+name, T=t_ext,
+            #     save_folder=save_folder, filename='CL_'+name+'.pdf',
+            #     obstacle_centers=bounded_loss_fn.obstacle_centers,
+            #     obstacle_covs=bounded_loss_fn.obstacle_covs
+            # )
 
 # ------ 7. evaluate the trained model ------
 # evaluate on the train data

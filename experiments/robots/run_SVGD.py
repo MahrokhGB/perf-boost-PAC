@@ -9,7 +9,7 @@ sys.path.insert(1, BASE_DIR)
 from config import device
 from utils.plot_functions import *
 from plants import RobotsSystem, RobotsDataset
-from loss_functions import RobotsLossMultiBatch, RobotsLoss
+from loss_functions import RobotsLossMultiBatch
 from utils.assistive_functions import WrapLogger
 from arg_parser import argument_parser, print_args
 from inference_algs.distributions import GibbsPosterior
@@ -78,7 +78,7 @@ elif args.cont_type=='Affine':
     )
 elif args.cont_type=='NN':
     ctl_generic = NNController(
-        in_dim=sys.state_dim, out_dim=sys.in_dim, layer_sizes=[],
+        in_dim=sys.state_dim, out_dim=sys.in_dim, layer_sizes=args.layer_sizes,
         train_method=TRAIN_METHOD
     )
 else:
@@ -96,14 +96,14 @@ sat_bound += 0 if args.alpha_col is None else args.alpha_col
 sat_bound += 0 if args.alpha_obst is None else args.alpha_obst
 sat_bound = sat_bound/20
 logger.info('Loss saturates at: '+str(sat_bound))
-bounded_loss_fn = RobotsLoss(
+bounded_loss_fn = RobotsLossMultiBatch(
     Q=Q, alpha_u=args.alpha_u, xbar=dataset.xbar,
     loss_bound=loss_bound, sat_bound=sat_bound.to(device),
     alpha_col=args.alpha_col, alpha_obst=args.alpha_obst,
     min_dist=args.min_dist if args.col_av else None,
     n_agents=sys.n_agents if args.col_av else None,
 )
-original_loss_fn = RobotsLoss(
+original_loss_fn = RobotsLossMultiBatch(
     Q=Q, alpha_u=args.alpha_u, xbar=dataset.xbar,
     loss_bound=None, sat_bound=None,
     alpha_col=args.alpha_col, alpha_obst=args.alpha_obst,
@@ -135,7 +135,6 @@ logger.info('gibbs_lambda: %.2f' % gibbs_lambda + ' (use lambda_*)' if gibbs_lam
 # define target distribution
 gibbs_posteior = GibbsPosterior(
     loss_fn=bounded_loss_fn, lambda_=gibbs_lambda, prior_dict=prior_dict,
-    # num_ensemble_models=1, #TODO
     # attributes of the CL system
     controller=ctl_generic, sys=sys,
     # misc

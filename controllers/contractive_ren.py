@@ -96,11 +96,11 @@ class ContractiveREN(nn.Module):
         Update non-trainable matrices according to the REN formulation to preserve contraction.
         """
         # dependent params
-        H = torch.matmul(self.X.T, self.X) + self.epsilon * self.eye_mask_H
-        h1, h2, h3 = torch.split(H, [self.dim_internal, self.dim_nl, self.dim_internal], dim=0)
-        H11, H12, H13 = torch.split(h1, [self.dim_internal, self.dim_nl, self.dim_internal], dim=1)
-        H21, H22, _ = torch.split(h2, [self.dim_internal, self.dim_nl, self.dim_internal], dim=1)
-        H31, H32, H33 = torch.split(h3, [self.dim_internal, self.dim_nl, self.dim_internal], dim=1)
+        H = torch.matmul(self.X.transpose(-1, -2), self.X) + self.epsilon * self.eye_mask_H
+        h1, h2, h3 = torch.split(H, [self.dim_internal, self.dim_nl, self.dim_internal], dim=-2)    # row split
+        H11, H12, H13 = torch.split(h1, [self.dim_internal, self.dim_nl, self.dim_internal], dim=-1)# col split
+        H21, H22, _ = torch.split(h2, [self.dim_internal, self.dim_nl, self.dim_internal], dim=-1)  # col split
+        H31, H32, H33 = torch.split(h3, [self.dim_internal, self.dim_nl, self.dim_internal], dim=-1)# col split
         P = H33
 
         # nn state dynamics
@@ -108,10 +108,10 @@ class ContractiveREN(nn.Module):
         self.B1 = H32
 
         # nn output
-        self.E = 0.5 * (H11 + self.contraction_rate_lb * P + self.Y - self.Y.T)
+        self.E = 0.5 * (H11 + self.contraction_rate_lb * P + self.Y - self.Y.transpose(-1, -2))
 
         # v signal for strictly acyclic REN
-        self.Lambda = 0.5 * torch.diag(H22)
+        self.Lambda = 0.5 * torch.diagonal(H22,  dim1=-2, dim2=-1)
         self.D11 = -torch.tril(H22, diagonal=-1)
         self.C1 = -H21
 
@@ -128,23 +128,33 @@ class ContractiveREN(nn.Module):
         # update non-trainable model params
         self._update_model_param()
 
-        batch_size = u_in.shape[0]
+        batch_size = u_in.shape[:-2]
 
-        w = torch.zeros(batch_size, 1, self.dim_nl, device=u_in.device)
+        w = torch.zeros(*batch_size, 1, self.dim_nl, device=u_in.device)
 
         # update each row of w using Eq. (8) with a lower triangular D11
         for i in range(self.dim_nl):
             #  v is element i of v with dim (batch_size, 1)
-            v = F.linear(self.x, self.C1[i, :]) + F.linear(w, self.D11[i, :]) + F.linear(u_in, self.D12[i,:])
-            w = w + (self.eye_mask_w[i, :] * torch.tanh(v / self.Lambda[i])).reshape(batch_size, 1, self.dim_nl)
+            C1row = self.C1[i:i+1, :] if self.C1.ndim==2 else self.C1[:, i:i+1, :]
+            D11row = self.D11[i:i+1, :] if self.D11.ndim==2 else self.D11[:, i:i+1, :]
+            D12row = self.D12[i:i+1, :] if self.D12.ndim==2 else self.D12[:, i:i+1, :]
+            xC1T = torch.matmul(self.x, C1row.transpose(-1,-2))
+            wD11T = torch.matmul(w, D11row.transpose(-1,-2))
+            uD12T = torch.matmul(u_in, D12row.transpose(-1,-2))
+            v = xC1T + wD11T + uD12T
+            w = w + (self.eye_mask_w[i, :] * torch.tanh(v / self.Lambda[i])).reshape(*batch_size, 1, self.dim_nl)
 
         # compute next state using Eq. 18
-        self.x = F.linear(
-            F.linear(self.x, self.F) + F.linear(w, self.B1) + F.linear(u_in, self.B2),
-            self.E.inverse())
+        xFT = torch.matmul(self.x, self.F.transpose(-1, -2))
+        wB1T = torch.matmul(w, self.B1.transpose(-1, -2))
+        uB2T = torch.matmul(u_in, self.B2.transpose(-1, -2))
+        self.x = torch.matmul(xFT + wB1T + uB2T, self.E.inverse().transpose(-1, -2))
 
         # compute output
-        y_out = F.linear(self.x, self.C2) + F.linear(w, self.D21) + F.linear(u_in, self.D22)
+        xC2T = torch.matmul(self.x, self.C2.transpose(-1, -2))
+        wD21T = torch.matmul(w, self.D21.transpose(-1, -2))
+        uD22T = torch.matmul(u_in, self.D22.transpose(-1, -2))
+        y_out = xC2T + wD21T + uD22T
         return y_out
 
     # init trainable params
@@ -173,6 +183,15 @@ class ContractiveREN(nn.Module):
             (name, getattr(self, name)) for name in self.training_param_names
         )
         return param_dict
+
+    def get_parameters_as_vector(self):
+        vec = None
+        for name in self.training_param_names:
+            if vec is None:
+                vec = getattr(self, name).flatten()
+            else:
+                vec = torch.cat((vec, getattr(self, name).flatten()), 0)
+        return vec
 
     def reset(self):
         self.x = self.init_x.detach().clone()

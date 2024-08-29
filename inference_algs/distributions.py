@@ -20,7 +20,7 @@ class GibbsPosterior():
         # attributes of the CL system
         controller, sys,
         # misc
-        logger=None, num_ensemble_models=1
+        logger=None
     ):
         self.lambda_ = to_tensor(lambda_)
         self.loss_fn = loss_fn
@@ -32,103 +32,50 @@ class GibbsPosterior():
         # set prior
         self._set_prior(prior_dict)
 
-        # init ensemble models
-        self.num_ensemble_models = num_ensemble_models
-        self.ensemble_models = [CLSystem(copy.deepcopy(sys), copy.deepcopy(controller), random_seed=None) for _ in range(self.num_ensemble_models)]
-        # Construct a "stateless" version of one of the models: parameters are meta Tensors and do not have storage.
-        self.ensemble_base_model = CLSystem(
-            copy.deepcopy(sys), copy.deepcopy(controller), random_seed=None
-        ).to('meta')
-
-    # def _log_prob_likelihood(self, params, train_data):
-    #     """
-    #     Args:
-    #         params: of shape (param_batch_size, num_controller_params)
-    #     """
-    #     L = params.shape[0]
-
-    #     param_ind = 0
-    #     loss_val = None
-    #     for _ in range(math.ceil(L/self.num_ensemble_models)):
-    #         model_ind = 0
-
-    #         # set params to controllers
-    #         for _ in range(self.num_ensemble_models):
-    #             if param_ind==L:
-    #                 break
-    #             self.ensemble_models[model_ind].controller.set_parameters_as_vector(
-    #                 params[param_ind, :].reshape(1,-1)
-    #             )
-    #             model_ind += 1
-    #             param_ind += 1
-    #         used_ensemble_models = self.ensemble_models[0:model_ind]
-
-    #         # stack all ensemble models
-    #         ensemble_params_mdl, ensemble_buffers_mdl = stack_module_state(used_ensemble_models)
-
-    #         # rollout
-    #         xs, us = torch.vmap(
-    #             self.ensemble_functional_model,
-    #             in_dims=(0, 0, None)
-    #         )(ensemble_params_mdl, ensemble_buffers_mdl, train_data)
-
-    #         # compute loss
-    #         if isinstance(self.loss_fn, RobotsLoss) or isinstance(self.loss_fn, LQLossFH):
-    #             for ind in range(xs.shape[0]):
-    #                 loss_val_tmp = self.loss_fn.forward(xs[ind, :, :, :], us[ind, :, :, :])
-    #                 if loss_val is None:
-    #                     loss_val = [loss_val_tmp]
-    #                 else:
-    #                     loss_val.append(loss_val_tmp)
-    #         elif isinstance(self.loss_fn, RobotsLossMultiBatch) or isinstance(self.loss_fn, LQLossFHMultiBatch):
-    #             loss_val_tmp = self.loss_fn.forward(xs, us)
-    #             if loss_val is None:
-    #                 loss_val = [loss_val_tmp]
-    #             else:
-    #                 loss_val.append(loss_val_tmp)
-    #         else:
-    #             raise NotImplementedError
-
-    #     loss_val = torch.cat(loss_val)
-
-    #     assert param_ind==L
-    #     assert loss_val.shape[0]==L and loss_val.shape[1]==1, loss_val.shape
-
-    #     return loss_val
-
     def _log_prob_likelihood(self, params, train_data):
-        assert len(params.shape)<3
-        if len(params.shape)==1:
+        if params.ndim==1:
             params = params.reshape(1, -1)
-        L = params.shape[0]
+        elif params.ndim==2 and params.shape[0]>1:
+            train_data = train_data.unsqueeze(1).expand(-1, params.shape[0], -1, -1)
 
-        for l_tmp in range(L):
-            # set params to controller
-            cl_system = self.generic_cl_system
-            cl_system.controller.set_parameters_as_vector(
-                params[l_tmp, :].reshape(1,-1)
-            )
-            # rollout
-            xs, _, us = cl_system.rollout(train_data)
-            # compute loss
-            loss_val_tmp = self.loss_fn.forward(xs, us)
-            if l_tmp==0:
-                loss_val = [loss_val_tmp]
-            else:
-                loss_val.append(loss_val_tmp)
-        loss_val = torch.cat(loss_val)
-        assert loss_val.shape[0]==L and loss_val.shape[1]==1
+        # set params to controller
+        cl_system = self.generic_cl_system
+        cl_system.controller.set_parameters_as_vector(
+            params
+        )
+        # rollout
+        xs, _, us = cl_system.rollout(train_data)
+        # compute loss
+        loss_val = self.loss_fn.forward(xs.transpose(0,1), us.transpose(0,1))
+
+        # L = params.shape[0]
+
+        # for l_tmp in range(L):
+        #     # set params to controller
+        #     cl_system = self.generic_cl_system
+        #     cl_system.controller.set_parameters_as_vector(
+        #         params[l_tmp, :].reshape(1,-1)
+        #     )
+        #     # rollout
+        #     xs, _, us = cl_system.rollout(train_data)
+        #     # compute loss
+        #     loss_val_tmp = self.loss_fn.forward(xs, us)
+        #     if l_tmp==0:
+        #         loss_val = [loss_val_tmp]
+        #     else:
+        #         loss_val.append(loss_val_tmp)
+        # loss_val = torch.cat(loss_val)
         return loss_val
 
     def log_prob(self, params, train_data):
         '''
         params is of shape (L, -1)
         '''
-        assert len(params.shape)<3
+        # assert len(params.shape)<3
         if len(params.shape)==1:
             params = params.reshape(1, -1)
         L = params.shape[0]
-        assert params.grad_fn is not None
+        # assert params.grad_fn is not None
         lpl = self._log_prob_likelihood(params, train_data)
         lpl = lpl.reshape(L) # TODO
         lpp = self._log_prob_prior(params)
@@ -277,10 +224,6 @@ class GibbsPosterior():
                 assert param_name_cont == param_name_prior, param_name_cont + 'in controller did not match ' + param_name_prior + ' in prior'
 
         self.prior = CatDist(self._param_dists.values())
-
-
-    def ensemble_functional_model(self, params, buffers, x):
-        return functional_call(self.ensemble_base_model, (params, buffers), (x,))
 
 
 # -------------------------
