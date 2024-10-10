@@ -23,7 +23,6 @@ from inference_algs.normflow_assist.mynf import NormalizingFlow
 import normflows as nf
 from inference_algs.normflow_assist import GibbsWrapperNF
 
-LEARN_BASE = True # TODO
 TRAIN_METHOD = 'normflow'
 
 U_SCALE = 0.1
@@ -290,19 +289,26 @@ with tqdm(range(args.epochs)) as t:
 
         # Eval and log
         if (it + 1) % args.log_epoch == 0 or it+1==args.epochs:
-            # sample some controllers and eval
             with torch.no_grad():
+                # evaluate some sampled controllers
                 z, _ = nfm.sample(num_samples_nf_eval)
+                loss_z, xs_z = eval_norm_flow(
+                    sys=sys, ctl_generic=ctl_generic, data=train_data,
+                    loss_fn=bounded_loss_fn, count_collisions=False, return_traj=True, params=z
+                )
+                # evaluate mean of sampled controllers
                 z_mean = torch.mean(z, axis=0).reshape(1, -1)
                 print(z_mean[0,0:10])
-                lpl = target.target_dist._log_prob_likelihood(params=z, train_data=train_data)
-                lpl_mean = target.target_dist._log_prob_likelihood(params=z_mean, train_data=train_data)
+                loss_z_mean, xs_z_mean = eval_norm_flow(
+                    sys=sys, ctl_generic=ctl_generic, data=train_data,
+                    loss_fn=bounded_loss_fn, count_collisions=False, return_traj=True, params=z_mean
+                )
 
             # log nf loss
             elapsed = t.format_dict['elapsed']
             elapsed_str = t.format_interval(elapsed)
             msg = 'Iter %i' % (it+1) + ' --- elapsed time: ' + elapsed_str  + ' --- norm flow loss: %f'  % nf_loss.item()
-            msg += ' --- train loss %f' % torch.mean(lpl) + ' --- train loss of mean %f' % torch.mean(lpl_mean)
+            msg += ' --- train loss %f' % loss_z + ' --- train loss of mean %f' % loss_z_mean
             logger.info(msg)
 
             # save nf model
@@ -316,11 +322,16 @@ with tqdm(range(args.epochs)) as t:
             plt.savefig(os.path.join(save_folder, 'loss.pdf'))
             plt.show()
             # plot closed_loop
-            with torch.no_grad():
-                ctl_generic.set_parameters_as_vector(z_mean)
-                x_log, _, u_log = sys.rollout(ctl_generic, plot_data)
+            _, xs_z_plot = eval_norm_flow(
+                sys=sys, ctl_generic=ctl_generic, data=plot_data,
+                loss_fn=bounded_loss_fn, count_collisions=False, return_traj=True, params=z
+            )
+            _, xs_z_mean_plot = eval_norm_flow(
+                sys=sys, ctl_generic=ctl_generic, data=plot_data,
+                loss_fn=bounded_loss_fn, count_collisions=False, return_traj=True, params=z_mean
+            )
             plot_trajectories(
-                x_log[0, :, :], # remove extra dim due to batching
+                torch.cat((xs_z_plot[:, :5, :, :].squeeze(0), xs_z_mean_plot), 0),
                 dataset.xbar, sys.n_agents, text="CL - "+name, T=t_ext,
                 save_folder=save_folder, filename='CL_'+name+'.pdf',
                 obstacle_centers=bounded_loss_fn.obstacle_centers,

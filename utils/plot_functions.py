@@ -1,18 +1,24 @@
-import torch, os
-from scipy.stats import multivariate_normal # TODO: use something compatible with tensors
+import torch, os, itertools
 import numpy as np
-import matplotlib.pyplot as plt
+import seaborn as sns
 from datetime import datetime
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+from scipy.stats import multivariate_normal # TODO: use something compatible with tensors
 
 
 def plot_trajectories(
     x, xbar, n_agents, save_folder, text="", save=True, filename='', T=100,
-    dots=False, circles=False, axis=False, min_dist=1, f=5,
+    axis=False, f=5,
     obstacle_centers=None, obstacle_covs=None
 ):
+    # reshape to (batch_size, T, dim_states)
+    if x.ndim==2:
+        x = x.reshape(1, *x.shape)
+    num_trajs = x.shape[0]
+
     filename = 'trajectories.pdf' if filename == '' else filename
 
-    # fig = plt.figure(f)
     fig, ax = plt.subplots(figsize=(f,f))
     # plot obstacles
     if not obstacle_covs is None:
@@ -32,41 +38,42 @@ def plot_trajectories(
         ax.pcolormesh(xx, yy, zz, cmap='Greys', vmin=z_min, vmax=z_max, shading='gouraud')
 
     ax.set_title(text)
-    colors = ['tab:blue', 'tab:orange']
-    for i in range(n_agents):
-        ax.plot(
-            x[:T+1,4*i].detach().cpu(), x[:T+1,4*i+1].detach().cpu(),
-            color=colors[i%2], linewidth=1
-        )
-        ax.plot(
-            x[T:,4*i].detach().cpu(), x[T:,4*i+1].detach().cpu(),
-            color='k', linewidth=0.1, linestyle='dotted', dashes=(3, 15)
-        )
-    for i in range(n_agents):
-        ax.plot(
-            x[0,4*i].detach().cpu(), x[0,4*i+1].detach().cpu(),
-            color=colors[i%2], marker='8'
-        )
-        ax.plot(
-            xbar[4*i].detach().cpu(), xbar[4*i+1].detach().cpu(),
-            color=colors[i%2], marker='*', markersize=10
-        )
+    palets = [sns.color_palette('dark:b_r', as_cmap=True), sns.color_palette('dark:salmon_r', as_cmap=True)]
+    norm = mpl.colors.Normalize(vmin=3, vmax=3+num_trajs) # avoid too light and too dark colors
+    cmaps = [mpl.cm.ScalarMappable(norm=norm, cmap=p) for p in palets]
 
-    if dots:
-        for i in range(n_agents):
-            for j in range(T):
-                ax.plot(
-                    x[j, 4*i].detach().cpu(), x[j, 4*i+1].detach().cpu(),
-                    color=colors[i%2], marker='o'
-                )
-    if circles:
-        for i in range(n_agents):
-            r = min_dist/2
-            circle = ax.Circle(
-                (x[T, 4*i].detach().cpu(), x[T, 4*i+1].detach().cpu()),
-                r, color=colors[i%2], alpha=0.5, zorder=10
+    # plot trajectories
+    for i in range(n_agents):
+        plot_final = True
+        # with sns.color_palette(palets[i%2], n_colors=num_trajs):
+        for traj_num in range(num_trajs):
+            color=cmaps[i].to_rgba(traj_num+1)
+            # trajectory until T
+            ax.plot(
+                x[traj_num, :T+1, 4*i].detach().cpu(),
+                x[traj_num, :T+1, 4*i+1].detach().cpu(),
+                linewidth=1 if traj_num==num_trajs-1 else 0.1, color=color
             )
-            ax.add_patch(circle)
+            # trajectory beyond T
+            ax.plot(
+                x[traj_num, T:, 4*i].detach().cpu(),
+                x[traj_num, T:, 4*i+1].detach().cpu(),
+                color='k', linewidth=0.3, linestyle='dotted', dashes=(3, 15)
+            )
+            # mark initial state
+            ax.plot(
+                x[traj_num, 0, 4*i].detach().cpu(),
+                x[traj_num, 0, 4*i+1].detach().cpu(),
+                marker='8', color=color
+            )
+            # mark final state
+            if plot_final:
+                ax.plot(
+                    xbar[4*i].detach().cpu(), xbar[4*i+1].detach().cpu(),
+                    marker='*', markersize=10, color=color
+                )
+                plot_final = False
+
     ax.axes.xaxis.set_visible(axis)
     ax.axes.yaxis.set_visible(axis)
     if save:
@@ -76,6 +83,7 @@ def plot_trajectories(
         )
     else:
         plt.show()
+    plt.close()
 
 
 def plot_traj_vs_time(t_end, n_agents, save_folder, x, u=None, text="", save=True, filename=''):

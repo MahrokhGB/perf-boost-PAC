@@ -48,23 +48,6 @@ class GibbsPosterior():
         # compute loss
         loss_val = self.loss_fn.forward(xs.transpose(0,1), us.transpose(0,1))
 
-        # L = params.shape[0]
-
-        # for l_tmp in range(L):
-        #     # set params to controller
-        #     cl_system = self.generic_cl_system
-        #     cl_system.controller.set_parameters_as_vector(
-        #         params[l_tmp, :].reshape(1,-1)
-        #     )
-        #     # rollout
-        #     xs, _, us = cl_system.rollout(train_data)
-        #     # compute loss
-        #     loss_val_tmp = self.loss_fn.forward(xs, us)
-        #     if l_tmp==0:
-        #         loss_val = [loss_val_tmp]
-        #     else:
-        #         loss_val.append(loss_val_tmp)
-        # loss_val = torch.cat(loss_val)
         return loss_val
 
     def log_prob(self, params, train_data):
