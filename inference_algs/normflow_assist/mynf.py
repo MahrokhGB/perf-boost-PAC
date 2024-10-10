@@ -1,8 +1,7 @@
-import torch, time
+import torch
 import torch.nn as nn
 import numpy as np
 
-from normflows import distributions
 from normflows import utils
 
 

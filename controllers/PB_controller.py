@@ -125,11 +125,11 @@ class PerfBoostController(nn.Module):
     # #     return np.concatenate([p.detach().clone().cpu().numpy().flatten() for p in self.c_ren.parameters()])
 
     def set_parameter(self, name, value):
-        current_val = getattr(self.c_ren, name)
-        if current_val.nelement()==value.nelement():
-            value = value.reshape(current_val.shape)
+        param_shape = getattr(self.c_ren, name+'_shape')
+        if torch.empty(param_shape).nelement()==value.nelement():
+            value = value.reshape(param_shape)
         else:
-            value = value.reshape(value.shape[0], *current_val.shape)
+            value = value.reshape(value.shape[0], *param_shape)
         if self.train_method=='empirical':
             value = torch.nn.Parameter(value)
         setattr(self.c_ren, name, value)
@@ -140,6 +140,12 @@ class PerfBoostController(nn.Module):
             self.set_parameter(name, value)
 
     def set_parameters_as_vector(self, value):
+        # flatten vec if not batched
+        if value.nelement()==self.num_params:
+            value = value.flatten()
+            # batched = False
+        # else:
+        #     batched = True
         # value is reshaped to the parameter shape
         idx = 0
         for name, shape in self.get_parameter_shapes().items():

@@ -174,8 +174,11 @@ class ContractiveREN(nn.Module):
     # setters and getters
     def get_parameter_shapes(self):
         param_dict = OrderedDict(
-            (name, getattr(self, name).shape) for name in self.training_param_names
+            (name, getattr(self, name+'_shape')) for name in self.training_param_names
         )
+        # param_dict = OrderedDict(
+        #     (name, getattr(self, name).shape) for name in self.training_param_names
+        # )
         return param_dict
 
     def get_named_parameters(self):

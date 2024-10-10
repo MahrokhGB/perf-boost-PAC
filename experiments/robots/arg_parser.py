@@ -40,7 +40,13 @@ def argument_parser():
     parser.add_argument('--epochs', type=int, default=-1, help='Total number of epochs for training. Default is 5000 if collision avoidance, else 100.')
     parser.add_argument('--lr', type=float, default=-1, help='Learning rate. Default is 2e-3 if collision avoidance, else 5e-3.')
     parser.add_argument('--log-epoch', type=int, default=-1, help='Frequency of logging in epochs. Default is 0.1 * epochs.')
-    parser.add_argument('--return-best', type=bool, default=True, help='Return the best model on the validation data among all logged iterations. The train data can be used instead of validation data. The Default is True.')
+    parser.add_argument('--return-best', type=bool, default=True, help='Return the best model on the validation data among all logged iterations. The train data can be used instead of validation data. Default is True.')
+
+    # inference
+    parser.add_argument('--flow-type', type=str, default='Planar', help='Flow type for normflow. Can be Planar, Radial, or NVP. Default is Planar.')
+    parser.add_argument('--num-flows', type=int, default=16, help='Number of transforms in for normflow. Default is 16. Set to 0 for no transforms')
+    parser.add_argument('--base-is-prior', type=bool, default=False, help='Base distribution for normflow is the same as the prior. Default is False.')
+    parser.add_argument('--base-center-emp', type=bool, default=False, help='Base distribution for normflow is centered at the controller learned empirically. Default is False.')
 
     # TODO: add the following
     # parser.add_argument('--patience-epoch', type=int, default=None, help='Patience epochs for no progress. Default is None which sets it to 0.2 * total_epochs.')
@@ -66,6 +72,10 @@ def argument_parser():
 
     if args.log_epoch==-1 or args.log_epoch is None:
         args.log_epoch = math.ceil(float(args.epochs)/10)
+
+    args.base_is_prior = False
+    print(args.base_is_prior)
+    assert not (args.base_is_prior and args.base_center_emp)
 
     # assertions and warning
     if not args.col_av:

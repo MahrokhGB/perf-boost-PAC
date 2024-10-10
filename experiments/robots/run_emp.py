@@ -16,19 +16,20 @@ from utils.assistive_functions import WrapLogger
 
 TRAIN_METHOD = 'empirical'
 
+# ----- parse and set experiment arguments -----
+args = argument_parser()
+msg = print_args(args)
+
 # ----- SET UP LOGGER -----
 now = datetime.now().strftime("%m_%d_%H_%M_%S")
 save_path = os.path.join(BASE_DIR, 'experiments', 'robots', 'saved_results', 'empirical')
-save_folder = os.path.join(save_path, 'perf_boost_'+now)
+save_folder = os.path.join(save_path, args.cont_type+'_'+now)
 os.makedirs(save_folder)
 logging.basicConfig(filename=os.path.join(save_folder, 'log'), format='%(asctime)s %(message)s', filemode='w')
 logger = logging.getLogger('perf_boost_')
 logger.setLevel(logging.DEBUG)
 logger = WrapLogger(logger)
 
-# ----- parse and set experiment arguments -----
-args = argument_parser()
-msg = print_args(args)
 logger.info(msg)
 torch.manual_seed(args.random_seed)
 
