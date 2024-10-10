@@ -20,23 +20,6 @@ def plot_trajectories(
     filename = 'trajectories.pdf' if filename == '' else filename
 
     fig, ax = plt.subplots(figsize=(f,f))
-    # plot obstacles
-    if not obstacle_covs is None:
-        assert not obstacle_centers is None
-        yy, xx = np.meshgrid(np.linspace(-3, 3, 100), np.linspace(-3, 3, 100))
-        zz = xx * 0
-        for center, cov in zip(obstacle_centers, obstacle_covs):
-            distr = multivariate_normal(
-                cov=torch.diag(cov.flatten()).detach().clone().cpu().numpy(),
-                mean=center.detach().clone().cpu().numpy().flatten()
-            )
-            for i in range(xx.shape[0]):
-                for j in range(xx.shape[1]):
-                    zz[i, j] += distr.pdf([xx[i, j], yy[i, j]])
-        z_min, z_max = np.abs(zz).min(), np.abs(zz).max()
-        ax = fig.subplots()
-        ax.pcolormesh(xx, yy, zz, cmap='Greys', vmin=z_min, vmax=z_max, shading='gouraud')
-
     ax.set_title(text)
     palets = [sns.color_palette('dark:b_r', as_cmap=True), sns.color_palette('dark:salmon_r', as_cmap=True)]
     norm = mpl.colors.Normalize(vmin=3, vmax=3+num_trajs) # avoid too light and too dark colors
@@ -74,8 +57,24 @@ def plot_trajectories(
                 )
                 plot_final = False
 
-    ax.axes.xaxis.set_visible(axis)
-    ax.axes.yaxis.set_visible(axis)
+    # plot obstacles
+    if not obstacle_covs is None:
+        assert not obstacle_centers is None
+        yy, xx = np.meshgrid(np.linspace(*ax.get_xlim(), 100), np.linspace(*ax.get_xlim(), 100))
+        zz = xx * 0
+        for center, cov in zip(obstacle_centers, obstacle_covs):
+            distr = multivariate_normal(
+                cov=torch.diag(cov.flatten()).detach().clone().cpu().numpy(),
+                mean=center.detach().clone().cpu().numpy().flatten()
+            )
+            for i in range(xx.shape[0]):
+                for j in range(xx.shape[1]):
+                    zz[i, j] += distr.pdf([xx[i, j], yy[i, j]])
+        z_min, z_max = np.abs(zz).min(), np.abs(zz).max()
+        ax.pcolormesh(xx, yy, zz, cmap='Greys', vmin=z_min, vmax=z_max, shading='gouraud')
+
+    # ax.axes.xaxis.set_visible(axis)
+    # ax.axes.yaxis.set_visible(axis)
     if save:
         fig.savefig(
             os.path.join(save_folder, filename),
