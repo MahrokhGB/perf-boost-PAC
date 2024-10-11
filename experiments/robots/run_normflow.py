@@ -155,15 +155,14 @@ target = GibbsWrapperNF(
     prop_scale=torch.tensor(6.0), prop_shift=torch.tensor(-3.0)
 )
 # ****** INIT NORMFLOWS ******
-flow_type = args.flow_type
 num_samples_nf_train = 100
 num_samples_nf_eval = 100 # TODO
 
 flows = []
 for i in range(args.num_flows):
-    if flow_type == 'Radial':
+    if args.flow_type == 'Radial':
         flows += [nf.flows.Radial((num_params,))]
-    elif flow_type == 'Planar': # f(z) = z + u * h(w * z + b)
+    elif args.flow_type == 'Planar': # f(z) = z + u * h(w * z + b)
         '''
         Default values:
             - u: uniform(-sqrt(2), sqrt(2))
@@ -171,8 +170,8 @@ for i in range(args.num_flows):
             - b: 0
             - h: tanh
         '''
-        flows += [nf.flows.Planar((num_params,), u=U_SCALE*torch.ones(num_params))]
-    elif flow_type == 'NVP':
+        flows += [nf.flows.Planar((num_params,), u=U_SCALE*(2*torch.rand(num_params)-1))]
+    elif args.flow_type == 'NVP':
         # Neural network with two hidden layers having 64 units each
         # Last layer is initialized by zeros making training more stable
         param_map = nf.nets.MLP([math.ceil(num_params/2), 64, 64, num_params], init_zeros=True)
@@ -197,6 +196,11 @@ elif args.base_center_emp:
         filename_load = os.path.join(save_path, 'empirical', 'PerfBoost_08_29_14_58_13', 'trained_controller.pt')
     elif args.dim_nl==2 and args.dim_internal==4:
         filename_load = os.path.join(save_path, 'empirical', 'PerfBoost_08_29_14_57_38', 'trained_controller.pt')
+    elif args.dim_nl==8 and args.dim_internal==8:
+        # empirical controller avoids collisions
+        # filename_load = os.path.join(save_path, 'empirical', 'PerfBoost_10_10_09_56_16', 'trained_controller.pt')
+        # empirical controller does not avoid collisions
+        filename_load = os.path.join(save_path, 'empirical', 'PerfBoost_10_11_10_41_10', 'trained_controller.pt')
     res_dict_loaded = torch.load(filename_load)
     mean = np.array([])
     for name in training_param_names:
@@ -205,33 +209,50 @@ elif args.base_center_emp:
     state_dict['loc'] = torch.Tensor(mean.reshape(1, -1))
     # state_dict['log_scale'] = state_dict['log_scale'] - 100 # TODO
     state_dict['log_scale'] = torch.log(torch.abs(state_dict['loc'])*STD_SCALE) # TODO
-    print('stddev', torch.exp(state_dict['log_scale']))
+    print('stddev', torch.exp(state_dict['log_scale'][0][0:10]))
     print('loaded mean', mean[0:10])
     q0.load_state_dict(state_dict)
+else:
+    state_dict = q0.state_dict()
+    state_dict['log_scale'] = torch.log(torch.abs(state_dict['loc'])*STD_SCALE) # TODO
+
 
 # set up normflow
 nfm = NormalizingFlow(q0=q0, flows=flows, p=target) # NOTE: set back to nf.NormalizingFlow
 nfm.to(device)  # Move model on GPU if available
 
 msg = '\n[INFO] Norm flows setup: num transformations: %i' % args.num_flows
-msg += ' -- flow type: ' + str(type(flows[0])) if args.num_flows>0 else ' -- flow type: None'
+msg += ' -- flow type: ' + args.flow_type if args.num_flows>0 else ' -- flow type: None'
 msg += ' -- base dist: ' + str(type(q0)) + ' -- base is prior: ' + str(args.base_is_prior)
+msg += ' -- base centered at emp: ' + str(args.base_center_emp)
 logger.info(msg)
 
-# plot closed-loop trajectories by sampling controller from untrained nfm
-logger.info('Plotting closed-loop trajectories before training the normalizing flow model.')
+# plot closed-loop trajectories by sampling controller from untrained nfm and base distribution
 with torch.no_grad():
-    z, _ = nfm.sample(10000)
-    z_mean = torch.mean(z, axis=0)
-    ctl_generic.set_parameters_as_vector(z_mean)
-    x_log, _, u_log = sys.rollout(ctl_generic, plot_data)
-plot_trajectories(
-    x_log[0, :, :], # remove extra dim due to batching
-    dataset.xbar, sys.n_agents, text="CL - before training", T=t_ext,
-    save_folder=save_folder, filename='CL_init.pdf',
-    obstacle_centers=bounded_loss_fn.obstacle_centers,
-    obstacle_covs=bounded_loss_fn.obstacle_covs
-)
+    for dist, dist_name in zip([q0, nfm], ['base', 'init']):
+        logger.info('Plotting closed-loop trajectories for ' + dist_name + ' flow model.')
+        if dist_name=='base':
+            z = dist.sample(num_samples_nf_eval)
+        else:
+            z, _ = dist.sample(num_samples_nf_eval)
+        z_mean = torch.mean(z, axis=0)
+        _, xs_z_plot = eval_norm_flow(
+            sys=sys, ctl_generic=ctl_generic, data=plot_data,
+            loss_fn=bounded_loss_fn, count_collisions=False, return_traj=True, params=z
+        )
+        _, xs_z_mean_plot = eval_norm_flow(
+            sys=sys, ctl_generic=ctl_generic, data=plot_data,
+            loss_fn=bounded_loss_fn, count_collisions=False, return_traj=True, params=z_mean
+        )
+        plot_trajectories(
+            torch.cat((xs_z_plot[:, :5, :, :].squeeze(0), xs_z_mean_plot), 0),
+            dataset.xbar, sys.n_agents, text='CL - ' + dist_name + ' flow', T=t_ext,
+            save_folder=save_folder, filename='CL_'+dist_name+'.pdf',
+            obstacle_centers=bounded_loss_fn.obstacle_centers,
+            obstacle_covs=bounded_loss_fn.obstacle_covs,
+            plot_collisions=True, min_dist=bounded_loss_fn.min_dist
+        )
+
 # evaluate on the train data
 logger.info('\n[INFO] evaluating the base distribution on %i training rollouts.' % args.num_rollouts)
 train_loss, train_num_col = eval_norm_flow(
@@ -335,7 +356,8 @@ with tqdm(range(args.epochs)) as t:
                 dataset.xbar, sys.n_agents, text="CL - "+name, T=t_ext,
                 save_folder=save_folder, filename='CL_'+name+'.pdf',
                 obstacle_centers=bounded_loss_fn.obstacle_centers,
-                obstacle_covs=bounded_loss_fn.obstacle_covs
+                obstacle_covs=bounded_loss_fn.obstacle_covs,
+                plot_collisions=True, min_dist=bounded_loss_fn.min_dist
             )
 
 # ------ 7. evaluate the trained model ------
@@ -374,5 +396,6 @@ plot_trajectories(
     dataset.xbar, sys.n_agents, text="CL - trained controller", T=t_ext,
     filename='CL_trained.pdf', save_folder=save_folder,
     obstacle_centers=bounded_loss_fn.obstacle_centers,
-    obstacle_covs=bounded_loss_fn.obstacle_covs
+    obstacle_covs=bounded_loss_fn.obstacle_covs,
+    plot_collisions=True, min_dist=bounded_loss_fn.min_dist
 )

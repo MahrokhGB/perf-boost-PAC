@@ -53,6 +53,7 @@ sys = RobotsSystem(
     xbar=dataset.xbar, x_init=plant_state_init,
     u_init=plant_input_init, linear_plant=args.linearize_plant, k=args.spring_const
 ).to(device)
+print('sys.n_agents', sys.n_agents)
 
 # ------------ 3. Controller ------------
 if args.cont_type=='PerfBoost':
@@ -95,14 +96,14 @@ bounded_loss_fn = RobotsLossMultiBatch(
     loss_bound=loss_bound, sat_bound=sat_bound.to(device),
     alpha_col=args.alpha_col, alpha_obst=args.alpha_obst,
     min_dist=args.min_dist if args.col_av else None,
-    n_agents=sys.n_agents if args.col_av else None,
+    n_agents=sys.n_agents,
 )
 original_loss_fn = RobotsLossMultiBatch(
     Q=Q, alpha_u=args.alpha_u, xbar=dataset.xbar,
     loss_bound=None, sat_bound=None,
     alpha_col=args.alpha_col, alpha_obst=args.alpha_obst,
     min_dist=args.min_dist if args.col_av else None,
-    n_agents=sys.n_agents if args.col_av else None,
+    n_agents=sys.n_agents,
 )
 
 # ------------ 5. Optimizer ------------
@@ -120,7 +121,8 @@ plot_trajectories(
     save_folder=save_folder, filename='CL_init.pdf',
     text="CL - before training", T=t_ext,
     obstacle_centers=original_loss_fn.obstacle_centers,
-    obstacle_covs=original_loss_fn.obstacle_covs
+    obstacle_covs=original_loss_fn.obstacle_covs,
+    plot_collisions=True, min_dist=args.min_dist
 )
 logger.info('\n------------ Begin training ------------')
 best_valid_loss = 1e6
@@ -217,5 +219,6 @@ plot_trajectories(
     save_folder=save_folder, filename='CL_trained.pdf',
     text="CL - trained controller", T=t_ext,
     obstacle_centers=original_loss_fn.obstacle_centers,
-    obstacle_covs=original_loss_fn.obstacle_covs
+    obstacle_covs=original_loss_fn.obstacle_covs,
+    plot_collisions=True, min_dist=args.min_dist
 )

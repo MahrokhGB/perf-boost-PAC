@@ -127,7 +127,7 @@ class RobotsLoss(LQLossFH):
         """
         min_sec_dist = self.min_dist + 0.2
         # compute pairwise distances
-        distance_sq = self.get_pairwise_distance_sq(x_batch)              # shape = (S, T, n_agents, n_agents)
+        distance_sq = get_pairwise_distance_sq(x_batch, self.n_agents)              # shape = (S, T, n_agents, n_agents)
         # compute and sum up loss when two agents are too close
         loss_ca = (1/(distance_sq + 1e-3) * (distance_sq.detach() < (min_sec_dist ** 2)) * self.mask).sum((-1, -2))/2        # shape = (S, T)
         # average over time steps
@@ -136,43 +136,53 @@ class RobotsLoss(LQLossFH):
         loss_ca = loss_ca.reshape(-1,1,1)
         return loss_ca
 
-    def count_collisions(self, x_batch):
-        """
-        Count the number of collisions between agents.
+    def count_collisions(self, x_batch, return_col_mat=False):
+        return count_collisions(
+            x_batch, n_agents=self.n_agents,
+            min_dist=self.min_dist, return_col_mat=return_col_mat
+        )
 
-        Args:
-            - x_batch: tensor of shape (S, T, state_dim, 1)
-                concatenated states of all agents on the third dimension.
 
-        Return:
-            - number of collisions between agents.
-        """
-        if len(x_batch.shape) == 3:
-            x_batch = x_batch.reshape(*x_batch.shape, 1)
-        distance_sq = self.get_pairwise_distance_sq(x_batch)  # shape = (S, T, n_agents, n_agents)
-        col_matrix = (0.0001 < distance_sq) * (distance_sq < self.min_dist ** 2)  # Boolean collision matrix of shape (S, T, n_agents, n_agents)
-        n_coll = col_matrix.sum().item()    # all collisions at all times and across all rollouts
+def count_collisions(x_batch, n_agents, min_dist, return_col_mat=False):
+    """
+    Count the number of collisions between agents.
+
+    Args:
+        - x_batch: tensor of shape (S, T, state_dim, 1)
+            concatenated states of all agents on the third dimension.
+
+    Return:
+        - number of collisions between agents.
+    """
+    if len(x_batch.shape) == 3:
+        x_batch = x_batch.reshape(*x_batch.shape, 1)
+    distance_sq = get_pairwise_distance_sq(x_batch, n_agents)  # shape = (S, T, n_agents, n_agents)
+    col_matrix = (0.0001 < distance_sq) * (distance_sq < min_dist ** 2)  # Boolean collision matrix of shape (S, T, n_agents, n_agents)
+    n_coll = col_matrix.sum().item()    # all collisions at all times and across all rollouts
+    if not return_col_mat:
         return n_coll/2                     # each collision is counted twice
+    else:
+        return n_coll/2, col_matrix
 
-    def get_pairwise_distance_sq(self, x_batch):
-        """
-        Squared distance between pairwise agents.
+def get_pairwise_distance_sq(x_batch, n_agents):
+    """
+    Squared distance between pairwise agents.
 
-        Args:
-            - x_batch: tensor of shape (S, T, state_dim, 1)
-                concatenated states of all agents on the third dimension.
+    Args:
+        - x_batch: tensor of shape (S, T, state_dim, 1)
+            concatenated states of all agents on the third dimension.
 
-        Return:
-            - matrix of shape (S, T, n_agents, n_agents) of squared pairwise distances.
-        """
-        state_dim_per_agent = int(x_batch.shape[2]/self.n_agents)
-        # collision avoidance:
-        x_agents = x_batch[:, :, 0::state_dim_per_agent, :]  # start from 0, pick every state_dim_per_agent. shape = (S, T, n_agents, 1)
-        y_agents = x_batch[:, :, 1::state_dim_per_agent, :]  # start from 1, pick every state_dim_per_agent. shape = (S, T, n_agents, 1)
-        deltaqx = x_agents.repeat(1, 1, 1, self.n_agents) - x_agents.repeat(1, 1, 1, self.n_agents).transpose(-2, -1)   # shape = (S, T, n_agents, n_agents)
-        deltaqy = y_agents.repeat(1, 1, 1, self.n_agents) - y_agents.repeat(1, 1, 1, self.n_agents).transpose(-2, -1)   # shape = (S, T, n_agents, n_agents)
-        distance_sq = deltaqx ** 2 + deltaqy ** 2             # shape = (S, T, n_agents, n_agents)
-        return distance_sq
+    Return:
+        - matrix of shape (S, T, n_agents, n_agents) of squared pairwise distances.
+    """
+    state_dim_per_agent = int(x_batch.shape[2]/n_agents)
+    # collision avoidance:
+    x_agents = x_batch[:, :, 0::state_dim_per_agent, :]  # start from 0, pick every state_dim_per_agent. shape = (S, T, n_agents, 1)
+    y_agents = x_batch[:, :, 1::state_dim_per_agent, :]  # start from 1, pick every state_dim_per_agent. shape = (S, T, n_agents, 1)
+    deltaqx = x_agents.repeat(1, 1, 1, n_agents) - x_agents.repeat(1, 1, 1, n_agents).transpose(-2, -1)   # shape = (S, T, n_agents, n_agents)
+    deltaqy = y_agents.repeat(1, 1, 1, n_agents) - y_agents.repeat(1, 1, 1, n_agents).transpose(-2, -1)   # shape = (S, T, n_agents, n_agents)
+    distance_sq = deltaqx ** 2 + deltaqy ** 2             # shape = (S, T, n_agents, n_agents)
+    return distance_sq
 
 
 def normpdf(q, mu, cov):  #TODO
@@ -201,3 +211,5 @@ def normpdf(q, mu, cov):  #TODO
         else:
             out += nom/den
     return out
+
+

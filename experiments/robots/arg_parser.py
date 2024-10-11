@@ -6,8 +6,8 @@ def argument_parser():
 
     # experiment
     parser.add_argument('--random-seed', type=int, default=5, help='Random seed. Default is 5.')
-    parser.add_argument('--col-av', type=bool, default=True, help='Avoid collisions. Default is True.')
-    parser.add_argument('--obst-av', type=bool, default=True, help='Avoid obstacles. Default is True.')
+    parser.add_argument('--col-av', type=str2bool, default=True, help='Avoid collisions. Default is True.')
+    parser.add_argument('--obst-av', type=str2bool, default=True, help='Avoid obstacles. Default is True.')
 
     # dataset
     parser.add_argument('--horizon', type=int, default=100, help='Time horizon for the computation. Default is 100.')
@@ -17,7 +17,7 @@ def argument_parser():
 
     # plant
     parser.add_argument('--spring-const', type=float, default=1.0 , help='Spring constant. Default is 1.0.')
-    parser.add_argument('--linearize-plant', type=bool, default=False, help='Linearize plant or not. Default is False.')
+    parser.add_argument('--linearize-plant', type=str2bool, default=False, help='Linearize plant or not. Default is False.')
 
     # controller
     parser.add_argument('--cont-type', type=str, default='Affine', help='Controller type. Can be Affine, NN, or PerfBoost. Default is Affine.')
@@ -40,13 +40,13 @@ def argument_parser():
     parser.add_argument('--epochs', type=int, default=-1, help='Total number of epochs for training. Default is 5000 if collision avoidance, else 100.')
     parser.add_argument('--lr', type=float, default=-1, help='Learning rate. Default is 2e-3 if collision avoidance, else 5e-3.')
     parser.add_argument('--log-epoch', type=int, default=-1, help='Frequency of logging in epochs. Default is 0.1 * epochs.')
-    parser.add_argument('--return-best', type=bool, default=True, help='Return the best model on the validation data among all logged iterations. The train data can be used instead of validation data. Default is True.')
+    parser.add_argument('--return-best', type=str2bool, default=True, help='Return the best model on the validation data among all logged iterations. The train data can be used instead of validation data. Default is True.')
 
     # inference
     parser.add_argument('--flow-type', type=str, default='Planar', help='Flow type for normflow. Can be Planar, Radial, or NVP. Default is Planar.')
     parser.add_argument('--num-flows', type=int, default=16, help='Number of transforms in for normflow. Default is 16. Set to 0 for no transforms')
-    parser.add_argument('--base-is-prior', type=bool, default=False, help='Base distribution for normflow is the same as the prior. Default is False.')
-    parser.add_argument('--base-center-emp', type=bool, default=False, help='Base distribution for normflow is centered at the controller learned empirically. Default is False.')
+    parser.add_argument('--base-is-prior', type=str2bool, default=False, help='Base distribution for normflow is the same as the prior. Default is False.')
+    parser.add_argument('--base-center-emp', type=str2bool, default=False, help='Base distribution for normflow is centered at the controller learned empirically. Default is False.')
 
     # TODO: add the following
     # parser.add_argument('--patience-epoch', type=int, default=None, help='Patience epochs for no progress. Default is None which sets it to 0.2 * total_epochs.')
@@ -59,6 +59,7 @@ def argument_parser():
 
 
     args = parser.parse_args()
+    print('COL AV ', args.col_av)
 
     # set default values that depend on other args
     if args.batch_size==-1:
@@ -73,14 +74,13 @@ def argument_parser():
     if args.log_epoch==-1 or args.log_epoch is None:
         args.log_epoch = math.ceil(float(args.epochs)/10)
 
-    args.base_is_prior = False
-    print(args.base_is_prior)
+    # args.base_is_prior = False
     assert not (args.base_is_prior and args.base_center_emp)
 
     # assertions and warning
     if not args.col_av:
         args.alpha_col = None
-        args.min_dist = None
+        # args.min_dist = None
     if not args.obst_av:
         args.alpha_obst = None
 
@@ -110,10 +110,23 @@ def print_args(args):
         msg += ' -- dim_nl: %i' % args.dim_nl
 
     msg += '\n[INFO] Loss:  alpha_u: %.6f' % args.alpha_u
-    msg += ' -- alpha_col: %.f' % args.alpha_col if args.col_av else ' -- no collision avoidance'
+    if args.col_av:
+        msg += ' -- alpha_col: %.f' % args.alpha_col
+    else:
+        msg += ' -- no collision avoidance'
     msg += ' -- alpha_obst: %.1f' % args.alpha_obst if args.obst_av else ' -- no obstacle avoidance'
 
     msg += '\n[INFO] Optimizer: lr: %.2e' % args.lr
     msg += ' -- batch_size: %i' % args.batch_size + ', -- return best model for validation data among logged epochs:' + str(args.return_best)
 
     return msg
+
+def str2bool(v):
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ('yes', 'true', 'True', 't', 'T', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'False', 'f', 'F', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
