@@ -37,7 +37,7 @@ def approx_Z(grid_dict, sys, lq_loss, data, lambda_):
 
 def approx_upper_bound(
     grid_dict, sys, lq_loss, data, lambda_,
-    epsilon, loss_bound, approximated_Z=None
+    delta, loss_bound, approximated_Z=None
 ):
     """
     approximates the upper bound by gridding over the prior.
@@ -54,9 +54,9 @@ def approx_upper_bound(
         print('Approximating Z provided to the function.')
     print('lambda C^2 / 8 s', lambda_*(loss_bound**2)/8/num_rollouts)
     print('- 1/lambda ln(Z)', - 1/lambda_*np.log(approximated_Z))
-    print('1/lambda ln(1/epsilon)', 1/lambda_*np.log(1/epsilon))
+    print('1/lambda ln(1/delta)', 1/lambda_*np.log(1/delta))
 
-    return lambda_*(loss_bound**2)/8/num_rollouts - 1/lambda_*np.log(approximated_Z) + 1/lambda_*np.log(1/epsilon)
+    return lambda_*(loss_bound**2)/8/num_rollouts - 1/lambda_*np.log(approximated_Z) + 1/lambda_*np.log(1/delta)
 
 
 def approx_Z_sample_base(
@@ -121,7 +121,7 @@ def approx_Z_sample_base(
 
 
 def approx_ub_sample_base(
-    epsilon,
+    delta,
     # for approximating Z
     prior_dist, d, n_p, data_train, ctl_generic, sys, lq_loss_bounded, lambda_, delta_hat,
     adaptive_np=False, max_np=None
@@ -129,7 +129,7 @@ def approx_ub_sample_base(
     """
     Approximates the upper bound using the sample-based method in Section V-A.
     inputs:
-        - epsilon: confidence level for PAC
+        - delta: confidence level for PAC
         - prior_dist: prior distribution with 'sample' function
         - d: dimension of the controller parameters
         - n_p: number of sampled controllers from the prior
@@ -161,4 +161,4 @@ def approx_ub_sample_base(
         lambda_=lambda_, delta_hat=delta_hat, adaptive_np=adaptive_np, max_np=max_np
     )
 
-    return lambda_*(C**2)/8/num_rollouts - 1/lambda_*np.log(approximarted_Z_sample_base) + 1/lambda_*np.log(1/epsilon), used_np
+    return lambda_*(C**2)/8/num_rollouts - 1/lambda_*np.log(approximarted_Z_sample_base) + 1/lambda_*np.log(1/delta), used_np

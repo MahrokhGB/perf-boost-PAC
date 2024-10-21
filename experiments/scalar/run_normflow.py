@@ -70,7 +70,7 @@ train_data, test_data = dataset.get_data(num_train_samples=args.num_rollouts, nu
 train_data, test_data = train_data.to(device).float(), test_data.to(device).float()
 # batch the data
 # train_dataloader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True) #NOTE
-train_dataloader = DataLoader(train_data, batch_size=args.num_rollouts, shuffle=False)
+train_dataloader = DataLoader(train_data, batch_size=min(args.num_rollouts, 512), shuffle=False)
 
 # ------------ 2. Plant ------------
 sys = LTISystem(
@@ -161,10 +161,9 @@ elif isinstance(ctl_generic, PerfBoostController):
         prior_dict[name+'_scale'] = prior_std
 
 # ------------ 6. NEW: Posterior ------------
-epsilon = 0.2       # PAC holds with Pr >= 1-epsilon
-gibbs_lambda_star = (8*args.num_rollouts*math.log(1/epsilon))**0.5   # lambda for Gibbs
+gibbs_lambda_star = (8*args.num_rollouts*math.log(1/args.delta))**0.5   # lambda for Gibbs
 lambda_ = gibbs_lambda_star
-msg = ' -- epsilon: %.1f' % epsilon + ' -- prior over bias: ' + prior_type_b + ' -- lambda: %.1f' % lambda_
+msg = ' -- delta: %.1f' % args.delta + ' -- prior over bias: ' + prior_type_b + ' -- lambda: %.1f' % lambda_
 logger.info(msg)
 
 # define target distribution

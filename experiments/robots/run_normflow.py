@@ -58,7 +58,7 @@ plot_data[:, 0, :] = (dataset.x0.detach() - dataset.xbar)
 plot_data = plot_data.to(device)
 # batch the data
 # NOTE: for normflow, must use all the data at each iter b.c. otherwise, the target distribution changes.
-train_dataloader = DataLoader(train_data, batch_size=args.num_rollouts, shuffle=False)
+train_dataloader = DataLoader(train_data, batch_size=min(args.num_rollouts, 512), shuffle=False)
 
 # ------------ 2. Plant ------------
 plant_input_init = None     # all zero
@@ -136,9 +136,8 @@ else:
         prior_dict[name+'_scale'] = prior_std
 
 # ------------ 6. NEW: Posterior ------------
-epsilon = 0.1       # PAC holds with Pr >= 1-epsilon
-gibbs_lambda_star = (8*args.num_rollouts*math.log(1/epsilon))**0.5   # lambda for Gibbs
-gibbs_lambda = 1000 #gibbs_lambda_star # TODO
+gibbs_lambda_star = (8*args.num_rollouts*math.log(1/args.delta))**0.5   # lambda for Gibbs
+gibbs_lambda = gibbs_lambda_star # 1000 # TODO
 logger.info('gibbs_lambda: %.2f' % gibbs_lambda + ' (use lambda_*)' if gibbs_lambda == gibbs_lambda_star else '')
 # define target distribution
 gibbs_posteior = GibbsPosterior(
@@ -369,7 +368,7 @@ train_loss, train_num_col = eval_norm_flow(
 )
 msg = 'Average loss: %.4f' % train_loss
 if args.col_av:
-    msg += ' -- Average number of collisions = %i' % train_num_col
+    msg += ' -- total number of collisions = %i' % train_num_col
 logger.info(msg)
 
 # evaluate on the test data
@@ -380,7 +379,7 @@ test_loss, test_num_col = eval_norm_flow(
 )
 msg = 'Average loss: %.4f' % test_loss
 if args.col_av:
-    msg += ' -- Average number of collisions = %i' % test_num_col
+    msg += ' -- total number of collisions = %i' % test_num_col
 logger.info(msg)
 
 # plot closed-loop trajectories using the trained controller
@@ -388,14 +387,19 @@ logger.info('Plotting closed-loop trajectories using the trained controller...')
 with torch.no_grad():
     z, _ = nfm.sample(100)
     z_mean = torch.mean(z, axis=0)
-    ctl_generic.set_parameters_as_vector(z_mean)
-    x_log, _, u_log = sys.rollout(ctl_generic, plot_data)
-filename = os.path.join(save_folder, 'CL_trained.pdf')
-plot_trajectories(
-    x_log[0, :, :], # remove extra dim due to batching
-    dataset.xbar, sys.n_agents, text="CL - trained controller", T=t_ext,
-    filename='CL_trained.pdf', save_folder=save_folder,
-    obstacle_centers=bounded_loss_fn.obstacle_centers,
-    obstacle_covs=bounded_loss_fn.obstacle_covs,
-    plot_collisions=True, min_dist=bounded_loss_fn.min_dist
-)
+    _, xs_z_plot = eval_norm_flow(
+        sys=sys, ctl_generic=ctl_generic, data=plot_data,
+        loss_fn=bounded_loss_fn, count_collisions=False, return_traj=True, params=z
+    )
+    _, xs_z_mean_plot = eval_norm_flow(
+        sys=sys, ctl_generic=ctl_generic, data=plot_data,
+        loss_fn=bounded_loss_fn, count_collisions=False, return_traj=True, params=z_mean
+    )
+    plot_trajectories(
+        torch.cat((xs_z_plot[:, :5, :, :].squeeze(0), xs_z_mean_plot), 0),
+        dataset.xbar, sys.n_agents, text='CL - trained flow', T=t_ext,
+        save_folder=save_folder, filename='CL_trained.pdf',
+        obstacle_centers=bounded_loss_fn.obstacle_centers,
+        obstacle_covs=bounded_loss_fn.obstacle_covs,
+        plot_collisions=True, min_dist=bounded_loss_fn.min_dist
+    )

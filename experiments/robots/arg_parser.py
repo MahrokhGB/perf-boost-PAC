@@ -28,7 +28,6 @@ def argument_parser():
     # NN controller
     parser.add_argument('--layer-sizes', nargs='+', default=None, help='size of NN controller hidden layers. Default is no hidden layers. use like --layer-sizes 4 4 for 2 hidden layers each with 4 neurons.')
 
-
     # loss
     parser.add_argument('--alpha-u', type=float, default=0.1/400 , help='Weight of the loss due to control input "u". Default is 0.1/400.') #TODO: 400 is output_amplification^2
     parser.add_argument('--alpha-col', type=float, default=100 , help='Weight of the collision avoidance loss. Default is 100 if "col-av" is True, else None.')
@@ -47,6 +46,9 @@ def argument_parser():
     parser.add_argument('--num-flows', type=int, default=16, help='Number of transforms in for normflow. Default is 16. Set to 0 for no transforms')
     parser.add_argument('--base-is-prior', type=str2bool, default=False, help='Base distribution for normflow is the same as the prior. Default is False.')
     parser.add_argument('--base-center-emp', type=str2bool, default=False, help='Base distribution for normflow is centered at the controller learned empirically. Default is False.')
+
+    # Gibbs
+    parser.add_argument('--delta', type=float, default=0.1 , help='Delta for Gibbs distribution. PAC bounds hold with prob >= 1- delta. Default is 0.1.')
 
     # TODO: add the following
     # parser.add_argument('--patience-epoch', type=int, default=None, help='Patience epochs for no progress. Default is None which sets it to 0.2 * total_epochs.')

@@ -128,8 +128,7 @@ else:
         prior_dict[name+'_scale'] = prior_std
 
 # ------------ 6. Posterior ------------
-epsilon = 0.1       # PAC holds with Pr >= 1-epsilon
-gibbs_lambda_star = (8*args.num_rollouts*math.log(1/epsilon))**0.5   # lambda for Gibbs
+gibbs_lambda_star = (8*args.num_rollouts*math.log(1/args.delta))**0.5   # lambda for Gibbs
 gibbs_lambda = gibbs_lambda_star
 logger.info('gibbs_lambda: %.2f' % gibbs_lambda + ' (use lambda_*)' if gibbs_lambda == gibbs_lambda_star else '')
 # define target distribution
@@ -158,7 +157,7 @@ svgd_cont = SVGDCont(
     optimizer='Adam', lr=args.lr, lr_decay=None, #TODO: add decay
     initial_particles=initial_particles, kernel='RBF', bandwidth=None,
 )
-msg = '\n[INFO] SVGD: epsilon: %.2f' % epsilon + ' -- num particles: %2.f' % num_particles
+msg = '\n[INFO] SVGD: delta: %.2f' % args.delta + ' -- num particles: %2.f' % num_particles
 msg += ' -- initialization std: %.4f' % initialization_std
 
 
