@@ -1,7 +1,6 @@
 import math, sys, os
 import pandas as pd
 import seaborn as sns
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 

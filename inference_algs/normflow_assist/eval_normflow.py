@@ -1,11 +1,12 @@
 import torch
 
-def eval_norm_flow(sys, ctl_generic, data, loss_fn, count_collisions, return_traj=False, num_samples=None, nfm=None, params=None):
+def eval_norm_flow(sys, ctl_generic, data, loss_fn, count_collisions, return_traj=False, num_samples=None, nfm=None, params=None, return_av=True):
     '''
     evaluate normalizing flow model.
 
     - params: if None, sample from nfm. o.w., evaluate the given params.
     - nfm: the normflow model used to sample params if params is None.
+    - return_av: when more than one sampled controller is evaluated, return loss form each individual controller or the average loss.
     '''
     with torch.no_grad():
         # sample from nfm. params is of shape(num_samples, dim_param)
@@ -51,13 +52,19 @@ def eval_norm_flow(sys, ctl_generic, data, loss_fn, count_collisions, return_tra
             for param_ind in range(num_samples):
                 num_col[param_ind] = loss_fn.count_collisions(xs[:, param_ind, :, :])
 
+        # compute the average loss and num collisions
+        if return_av:
+            loss_val = sum(loss_val)/len(loss_val)
+            if count_collisions:
+                num_col = sum(num_col)/len(num_col)
+
         if count_collisions:
             if not return_traj:
-                return sum(loss_val)/len(loss_val), sum(num_col)/len(num_col)
+                return loss_val, num_col
             else:
-                return sum(loss_val)/len(loss_val), sum(num_col)/len(num_col), xs
+                return loss_val, num_col, xs
         else:
             if not return_traj:
-                return sum(loss_val)/len(loss_val)
+                return loss_val
             else:
-                return sum(loss_val)/len(loss_val), xs
+                return loss_val, xs

@@ -207,6 +207,8 @@ class NormalizingFlow(nn.Module):
         for i in range(len(self.flows) - 1, -1, -1):
             z, log_det = self.flows[i].inverse(z)
             log_q += log_det
+            print(i, log_det)
+        print('base', self.q0.log_prob(z))
         log_q += self.q0.log_prob(z)
         return log_q
 

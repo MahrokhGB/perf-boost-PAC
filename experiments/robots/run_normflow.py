@@ -26,7 +26,7 @@ from inference_algs.normflow_assist import GibbsWrapperNF
 TRAIN_METHOD = 'normflow'
 
 U_SCALE = 0.1
-STD_SCALE = 0.1
+STD_SCALE = 1 #0.1 TODO
 
 # ----- parse and set experiment arguments -----
 args = argument_parser()
@@ -58,7 +58,7 @@ plot_data[:, 0, :] = (dataset.x0.detach() - dataset.xbar)
 plot_data = plot_data.to(device)
 # batch the data
 # NOTE: for normflow, must use all the data at each iter b.c. otherwise, the target distribution changes.
-train_dataloader = DataLoader(train_data, batch_size=min(args.num_rollouts, 512), shuffle=False)
+train_dataloader = DataLoader(train_data, batch_size=min(args.num_rollouts, 256), shuffle=False)
 
 # ------------ 2. Plant ------------
 plant_input_init = None     # all zero
@@ -118,7 +118,7 @@ original_loss_fn = RobotsLossMultiBatch(
     n_agents=sys.n_agents if args.col_av else None,
 )
 
-# ------------ 5. NEW: Prior ------------
+# ------------ 5. Prior ------------
 if args.cont_type in ['Affine', 'NN']:
     training_param_names = ['weight', 'bias']
     prior_dict = {
@@ -135,9 +135,9 @@ else:
         prior_dict[name+'_loc'] = 0
         prior_dict[name+'_scale'] = prior_std
 
-# ------------ 6. NEW: Posterior ------------
+# ------------ 6. Posterior ------------
 gibbs_lambda_star = (8*args.num_rollouts*math.log(1/args.delta))**0.5   # lambda for Gibbs
-gibbs_lambda = gibbs_lambda_star # 1000 # TODO
+gibbs_lambda = 1 # gibbs_lambda_star # 1000 # TODO
 logger.info('gibbs_lambda: %.2f' % gibbs_lambda + ' (use lambda_*)' if gibbs_lambda == gibbs_lambda_star else '')
 # define target distribution
 gibbs_posteior = GibbsPosterior(
@@ -153,27 +153,36 @@ target = GibbsWrapperNF(
     target_dist=gibbs_posteior, train_dataloader=train_dataloader,
     prop_scale=torch.tensor(6.0), prop_shift=torch.tensor(-3.0)
 )
-# ****** INIT NORMFLOWS ******
+
+# ------------ 7. save setup ------------
+setup_dict = vars(args)
+setup_dict['sat_bound'] = sat_bound
+setup_dict['loss_bound'] = loss_bound
+setup_dict['prior_dict'] = prior_dict
+setup_dict['gibbs_lambda'] = gibbs_lambda
+torch.save(setup_dict, os.path.join(save_folder, 'setup'))
+
+# ------------ 8. NormFlows ------------
 num_samples_nf_train = 100
 num_samples_nf_eval = 100 # TODO
 
 flows = []
 for i in range(args.num_flows):
     if args.flow_type == 'Radial':
-        flows += [nf.flows.Radial((num_params,))]
+        flows += [nf.flows.Radial((num_params,), act=args.flow_activation)]
     elif args.flow_type == 'Planar': # f(z) = z + u * h(w * z + b)
         '''
         Default values:
             - u: uniform(-sqrt(2), sqrt(2))
             - w: uniform(-sqrt(2/num_prams), sqrt(2/num_prams))
             - b: 0
-            - h: tanh
+            - h: args.flow_activation (tanh or leaky_relu)
         '''
-        flows += [nf.flows.Planar((num_params,), u=U_SCALE*(2*torch.rand(num_params)-1))]
+        flows += [nf.flows.Planar((num_params,), u=U_SCALE*(2*torch.rand(num_params)-1), act=args.flow_activation)]
     elif args.flow_type == 'NVP':
         # Neural network with two hidden layers having 64 units each
         # Last layer is initialized by zeros making training more stable
-        param_map = nf.nets.MLP([math.ceil(num_params/2), 64, 64, num_params], init_zeros=True)
+        param_map = nf.nets.MLP([math.ceil(num_params/2), 64, 64, num_params], init_zeros=True, act=args.flow_activation)
         # Add flow layer
         flows.append(nf.flows.AffineCouplingBlock(param_map))
         # Swap dimensions
@@ -182,7 +191,7 @@ for i in range(args.num_flows):
         raise NotImplementedError
 
 # base distribution
-q0 = nf.distributions.DiagGaussian(num_params)
+q0 = nf.distributions.DiagGaussian(num_params, trainable=args.learn_base)
 # base distribution same as the prior
 if args.base_is_prior:
     state_dict = q0.state_dict()
@@ -222,10 +231,12 @@ nfm.to(device)  # Move model on GPU if available
 
 msg = '\n[INFO] Norm flows setup: num transformations: %i' % args.num_flows
 msg += ' -- flow type: ' + args.flow_type if args.num_flows>0 else ' -- flow type: None'
-msg += ' -- base dist: ' + str(type(q0)) + ' -- base is prior: ' + str(args.base_is_prior)
-msg += ' -- base centered at emp: ' + str(args.base_center_emp)
+msg += ' -- flow activation: ' + args.flow_activation
+msg += ' -- base dist: ' + q0.__class__.__name__ + ' -- base is prior: ' + str(args.base_is_prior)
+msg += ' -- base centered at emp: ' + str(args.base_center_emp) + ' -- learn base: ' + str(args.learn_base)
 logger.info(msg)
 
+# ------------ 9. Test initial model ------------
 # plot closed-loop trajectories by sampling controller from untrained nfm and base distribution
 with torch.no_grad():
     for dist, dist_name in zip([q0, nfm], ['base', 'init']):
@@ -273,7 +284,7 @@ if args.col_av:
     msg += ' -- Average number of collisions = %i' % train_num_col
 logger.info(msg)
 
-# ****** TRAIN NORMFLOWS ******
+# ------------ 10. Train NormFlows ------------
 # Train model
 anneal_iter = int(args.epochs/2)
 annealing = False # NOTE
@@ -359,7 +370,7 @@ with tqdm(range(args.epochs)) as t:
                 plot_collisions=True, min_dist=bounded_loss_fn.min_dist
             )
 
-# ------ 7. evaluate the trained model ------
+# ------ 11. evaluate the trained model ------
 # evaluate on the train data
 logger.info('\n[INFO] evaluating the trained flow on %i training rollouts.' % args.num_rollouts)
 train_loss, train_num_col = eval_norm_flow(

@@ -82,8 +82,9 @@ class ContractiveREN(nn.Module):
         self.D12_shape = (self.dim_nl, self.dim_in)
 
         # define trainble params
+        self.initialization_std = initialization_std
         self.training_param_names = ['X', 'Y', 'B2', 'C2', 'D21', 'D22', 'D12']
-        self._init_trainable_params(initialization_std)
+        self._init_trainable_params(self.initialization_std)
         # set number of trainable params
         self.num_params = sum([getattr(self, p_name).nelement() for p_name in self.training_param_names])
 
@@ -198,3 +199,11 @@ class ContractiveREN(nn.Module):
 
     def reset(self):
         self.x = self.init_x.detach().clone()
+
+    def hard_reset(self):
+        # NOTE: detaches the parameters from optimizer. use only during testing
+        # solves the problem that could always sample the same number of controllers from normflow
+        self.reset()
+        old_device = self.X.device
+        self._init_trainable_params(self.initialization_std)
+        self = self.to(old_device)

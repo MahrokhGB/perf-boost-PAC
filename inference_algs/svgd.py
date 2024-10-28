@@ -3,11 +3,11 @@ import numpy as np
 
 
 class SVGD:
-    def __init__(self, unnormalized_dist, kernel, optimizer):
+    def __init__(self, target, kernel, optimizer):
         """
-        unnormalized_dist: the unnormalized distribution to approximate
+        target: the unnormalized distribution to approximate
         """
-        self.unnormalized_dist = unnormalized_dist
+        self.target = target
         self.K = kernel
         self.optim = optimizer
 
@@ -20,7 +20,7 @@ class SVGD:
         # compute log prob of each particle given the unnormalized dist
         num_particles = particles.shape[0]
         for particle_num in range(num_particles):
-            log_prob_particle = self.unnormalized_dist.log_prob(
+            log_prob_particle = self.target.log_prob(
                 particles[particle_num, :], data
             )
             if particle_num == 0:
