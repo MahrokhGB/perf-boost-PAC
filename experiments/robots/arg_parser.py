@@ -38,6 +38,7 @@ def argument_parser():
     parser.add_argument('--batch-size', type=int, default=5, help='Number of forward trajectories of the closed-loop system at each step. Default is 5.')
     parser.add_argument('--epochs', type=int, default=-1, help='Total number of epochs for training. Default is 5000 if collision avoidance, else 100.')
     parser.add_argument('--lr', type=float, default=-1, help='Learning rate. Default is 2e-3 if collision avoidance, else 5e-3.')
+    parser.add_argument('--weight-decay', type=float, default=0, help='Weight decay for Adam optimizer. Default is 0.')
     parser.add_argument('--log-epoch', type=int, default=-1, help='Frequency of logging in epochs. Default is 0.1 * epochs.')
     parser.add_argument('--return-best', type=str2bool, default=True, help='Return the best model on the validation data among all logged iterations. The train data can be used instead of validation data. Default is True.')
 
@@ -48,9 +49,13 @@ def argument_parser():
     parser.add_argument('--base-is-prior', type=str2bool, default=False, help='Base distribution for normflow is the same as the prior. Default is False.')
     parser.add_argument('--base-center-emp', type=str2bool, default=False, help='Base distribution for normflow is centered at the controller learned empirically. Default is False.')
     parser.add_argument('--learn-base', type=str2bool, default=True, help='Optimize base distribution of normflow. Default is True.')
+    parser.add_argument('--prior-std', type=float, default=7, help='Gaussian prior std. Default is 7.')
+    parser.add_argument('--annealing', type=str2bool, default=True, help='Annealing loss for normflow. Default is False.')
+    parser.add_argument('--anneal-iter', type=int, default=None, help='Annealing iteration for normflow. Default is half epochs.')
 
     # Gibbs
     parser.add_argument('--delta', type=float, default=0.1 , help='Delta for Gibbs distribution. PAC bounds hold with prob >= 1- delta. Default is 0.1.')
+    parser.add_argument('--gibbs-lambda', type=float, default=None , help='Lambda is the tempretaure of the Gibbs distribution. Default is lambda_star (see the paper).')
 
     # TODO: add the following
     # parser.add_argument('--patience-epoch', type=int, default=None, help='Patience epochs for no progress. Default is None which sets it to 0.2 * total_epochs.')
@@ -63,7 +68,6 @@ def argument_parser():
 
 
     args = parser.parse_args()
-    print('COL AV ', args.col_av)
 
     # set default values that depend on other args
     if args.batch_size==-1:
@@ -78,8 +82,13 @@ def argument_parser():
     if args.log_epoch==-1 or args.log_epoch is None:
         args.log_epoch = math.ceil(float(args.epochs)/10)
 
-    # args.base_is_prior = False
+    if args.annealing and args.anneal_iter is None:
+        args.anneal_iter = int(args.epochs/2)
+
     assert not (args.base_is_prior and args.base_center_emp)
+
+    if args.gibbs_lambda is None:
+        args.gibbs_lambda = (8*args.num_rollouts*math.log(1/args.delta))**0.5
 
     # assertions and warning
     if not args.col_av:
@@ -102,7 +111,7 @@ def argument_parser():
     return args
 
 
-def print_args(args):
+def print_args(args, method='empirical'):
     msg = '\n[INFO] Dataset: n_agents: %i' % args.n_agents + ' -- num_rollouts: %i' % args.num_rollouts
     msg += ' -- std_ini: %.2f' % args.std_init_plant + ' -- time horizon: %i' % args.horizon
 
@@ -120,8 +129,22 @@ def print_args(args):
         msg += ' -- no collision avoidance'
     msg += ' -- alpha_obst: %.1f' % args.alpha_obst if args.obst_av else ' -- no obstacle avoidance'
 
-    msg += '\n[INFO] Optimizer: lr: %.2e' % args.lr
+    msg += '\n[INFO] Optimizer: lr: %.2e' % args.lr + 'weight decay: %.2e' % args.weight_decay
     msg += ' -- batch_size: %i' % args.batch_size + ', -- return best model for validation data among logged epochs:' + str(args.return_best)
+
+    msg += '\n[INFO] Prior: prior std: %.2e' % args.prior_std
+
+    msg += '\n[INFO] Gibbs: delta: %.2e' % args.delta + ' -- gibbs_lambda: %.2f' % args.gibbs_lambda
+
+    # arguments for normflow:
+    if method=='normflow':
+        msg += '\n[INFO] Norm flows setup: num transformations: %i' % args.num_flows
+        msg += ' -- flow type: ' + args.flow_type if args.num_flows>0 else ' -- flow type: None'
+        msg += ' -- flow activation: ' + args.flow_activation
+        msg += ' -- base dist: DiagGaussian -- base is prior: ' + str(args.base_is_prior)
+        msg += ' -- base centered at emp: ' + str(args.base_center_emp) + ' -- learn base: ' + str(args.learn_base)
+        msg += ' -- annealing: ' + str(args.annealing)
+        msg += ' -- annealing iter: %i' % args.anneal_iter if args.annealing else ''
 
     return msg
 

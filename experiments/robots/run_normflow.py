@@ -30,7 +30,7 @@ STD_SCALE = 1 #0.1 TODO
 
 # ----- parse and set experiment arguments -----
 args = argument_parser()
-msg = print_args(args)
+msg = print_args(args, TRAIN_METHOD)
 
 # ----- SET UP LOGGER -----
 now = datetime.now().strftime("%m_%d_%H_%M_%S")
@@ -128,20 +128,17 @@ if args.cont_type in ['Affine', 'NN']:
         'bias_loc':0, 'bias_scale':5,
     }
 else:
-    prior_std = 7
     prior_dict = {'type':'Gaussian'}
     training_param_names = ['X', 'Y', 'B2', 'C2', 'D21', 'D22', 'D12']
     for name in training_param_names:
         prior_dict[name+'_loc'] = 0
-        prior_dict[name+'_scale'] = prior_std
+        prior_dict[name+'_scale'] = args.prior_std
 
 # ------------ 6. Posterior ------------
-gibbs_lambda_star = (8*args.num_rollouts*math.log(1/args.delta))**0.5   # lambda for Gibbs
-gibbs_lambda = 1 # gibbs_lambda_star # 1000 # TODO
-logger.info('gibbs_lambda: %.2f' % gibbs_lambda + ' (use lambda_*)' if gibbs_lambda == gibbs_lambda_star else '')
+
 # define target distribution
 gibbs_posteior = GibbsPosterior(
-    loss_fn=bounded_loss_fn, lambda_=gibbs_lambda, prior_dict=prior_dict,
+    loss_fn=bounded_loss_fn, lambda_=args.gibbs_lambda, prior_dict=prior_dict,
     # attributes of the CL system
     controller=ctl_generic, sys=sys,
     # misc
@@ -159,7 +156,7 @@ setup_dict = vars(args)
 setup_dict['sat_bound'] = sat_bound
 setup_dict['loss_bound'] = loss_bound
 setup_dict['prior_dict'] = prior_dict
-setup_dict['gibbs_lambda'] = gibbs_lambda
+setup_dict['gibbs_lambda'] = args.gibbs_lambda
 torch.save(setup_dict, os.path.join(save_folder, 'setup'))
 
 # ------------ 8. NormFlows ------------
@@ -229,13 +226,6 @@ else:
 nfm = NormalizingFlow(q0=q0, flows=flows, p=target) # NOTE: set back to nf.NormalizingFlow
 nfm.to(device)  # Move model on GPU if available
 
-msg = '\n[INFO] Norm flows setup: num transformations: %i' % args.num_flows
-msg += ' -- flow type: ' + args.flow_type if args.num_flows>0 else ' -- flow type: None'
-msg += ' -- flow activation: ' + args.flow_activation
-msg += ' -- base dist: ' + q0.__class__.__name__ + ' -- base is prior: ' + str(args.base_is_prior)
-msg += ' -- base centered at emp: ' + str(args.base_center_emp) + ' -- learn base: ' + str(args.learn_base)
-logger.info(msg)
-
 # ------------ 9. Test initial model ------------
 # plot closed-loop trajectories by sampling controller from untrained nfm and base distribution
 with torch.no_grad():
@@ -285,24 +275,15 @@ if args.col_av:
 logger.info(msg)
 
 # ------------ 10. Train NormFlows ------------
-# Train model
-anneal_iter = int(args.epochs/2)
-annealing = False # NOTE
-weight_decay = 0
-msg = '[INFO] Training setup: annealing: ' + str(annealing)
-msg += ' -- annealing iter: %i' % anneal_iter if annealing else ''
-msg += ' -- learning rate: %.6f' % args.lr + ' -- weight decay: %.6f' % weight_decay
-logger.info(msg)
-
 nf_loss_hist = [None]*args.epochs
 
-optimizer = torch.optim.Adam(nfm.parameters(), lr=args.lr, weight_decay=weight_decay)
+optimizer = torch.optim.Adam(nfm.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 with tqdm(range(args.epochs)) as t:
     for it in t:
         optimizer.zero_grad()
         t_now = time.time()
-        if annealing:
-            nf_loss = nfm.reverse_kld(num_samples_nf_train, beta=min([1., 0.01 + it / anneal_iter]))
+        if args.annealing:
+            nf_loss = nfm.reverse_kld(num_samples_nf_train, beta=min([1., 0.01 + it / args.anneal_iter]))
         else:
             nf_loss = nfm.reverse_kld(num_samples_nf_train)
         # print('reverse KLD time ', time.time()-t_now)
