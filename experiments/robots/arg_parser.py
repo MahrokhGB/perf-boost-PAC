@@ -44,13 +44,13 @@ def argument_parser():
 
     # inference
     parser.add_argument('--flow-type', type=str, default='Planar', help='Flow type for normflow. Can be Planar, Radial, or NVP. Default is Planar.')
-    parser.add_argument('--flow-activation', type=str, default='tanh', help='Activation function of each flow for normflow. Can be tanh or leaky_relu. Default is tanh.')
+    parser.add_argument('--flow-activation', type=str, default='leaky_relu', help='Activation function of each flow for normflow. Can be tanh or leaky_relu. Default is leaky_relu.')
     parser.add_argument('--num-flows', type=int, default=16, help='Number of transforms in for normflow. Default is 16. Set to 0 for no transforms')
     parser.add_argument('--base-is-prior', type=str2bool, default=False, help='Base distribution for normflow is the same as the prior. Default is False.')
     parser.add_argument('--base-center-emp', type=str2bool, default=False, help='Base distribution for normflow is centered at the controller learned empirically. Default is False.')
     parser.add_argument('--learn-base', type=str2bool, default=True, help='Optimize base distribution of normflow. Default is True.')
     parser.add_argument('--prior-std', type=float, default=7, help='Gaussian prior std. Default is 7.')
-    parser.add_argument('--annealing', type=str2bool, default=True, help='Annealing loss for normflow. Default is False.')
+    parser.add_argument('--annealing', type=str2bool, default=False, help='Annealing loss for normflow. Default is False.')
     parser.add_argument('--anneal-iter', type=int, default=None, help='Annealing iteration for normflow. Default is half epochs.')
 
     # Gibbs
@@ -129,7 +129,7 @@ def print_args(args, method='empirical'):
         msg += ' -- no collision avoidance'
     msg += ' -- alpha_obst: %.1f' % args.alpha_obst if args.obst_av else ' -- no obstacle avoidance'
 
-    msg += '\n[INFO] Optimizer: lr: %.2e' % args.lr + 'weight decay: %.2e' % args.weight_decay
+    msg += '\n[INFO] Optimizer: lr: %.2e' % args.lr + ' -- weight decay: %.2e' % args.weight_decay
     msg += ' -- batch_size: %i' % args.batch_size + ', -- return best model for validation data among logged epochs:' + str(args.return_best)
 
     msg += '\n[INFO] Prior: prior std: %.2e' % args.prior_std

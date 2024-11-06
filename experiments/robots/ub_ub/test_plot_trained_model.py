@@ -4,7 +4,7 @@ from datetime import datetime
 from torch.utils.data import DataLoader
 from matplotlib.lines import Line2D
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 print(BASE_DIR)
 sys.path.insert(1, BASE_DIR)
 
@@ -20,11 +20,42 @@ import normflows as nf
 from inference_algs.normflow_assist import GibbsWrapperNF
 from filename_lookup import get_filename
 
+def get_mcdim_ub(sys, ctl_generic, train_data, bounded_loss_fn, prior, delta, lambda_, C, num_prior_samples=5000, deltahat=None):
+    deltahat = delta if deltahat is None else deltahat
+    n_p_min = math.ceil(
+        (1-math.exp(-lambda_*C)/lambda_/C)**2 * math.log(1/deltahat) / 2
+    )
+    assert num_prior_samples>n_p_min
+
+    ctl_generic.reset()
+    ctl_generic.c_ren.hard_reset()
+
+    prior_samples = prior.sample(torch.Size([num_prior_samples]))
+    train_loss_prior_samples = torch.zeros(num_prior_samples)
+    for r in range(math.ceil(num_prior_samples/1000)):
+        end_ind = min((r+1)*1000, num_prior_samples)
+        tmp, _ = eval_norm_flow(
+            sys=sys, ctl_generic=ctl_generic, data=train_data,
+            num_samples=None,nfm=None,
+            params=prior_samples[r*1000:end_ind],
+            loss_fn=bounded_loss_fn,
+            count_collisions=True, return_av=False
+        )
+        train_loss_prior_samples[r*1000:end_ind] = tmp
+    assert end_ind==num_prior_samples
+    ub_const = 1/lambda_*math.log(1/delta) + lambda_*C**2/8/num_rollouts
+    mean_loss = min(train_loss_prior_samples)#/num_prior_samples
+    Z_hat_norm = sum(torch.exp(-lambda_*(train_loss_prior_samples-mean_loss)))/num_prior_samples
+    epsilon = (1-math.exp(-lambda_*C)) * (math.log(1/deltahat)/num_prior_samples/2)**0.5
+    mcdim_ub = ub_const - 1/lambda_*math.log(Z_hat_norm) + mean_loss + 1/lambda_*epsilon
+
+    return mcdim_ub
+
 
 delta = 0.01
-ACT = 'leaky_relu'
+ACT = 'tanh'
 LEARN_BASE = True
-prior_std = 1
+prior_std = 3
 
 TRAIN_METHOD = 'normflow'
 cont_type = 'PerfBoost'
@@ -42,8 +73,12 @@ for res_key in results.keys():
     results[res_key] = [None]*len(S)*num_samples_nf_eval
 row_num = 0
 
+mcdim_ubs = []
 for num_rollouts in S:
-    FILE_NAME = get_filename(delta=delta, learn_base=LEARN_BASE, act=ACT, num_rollouts=num_rollouts, prior_std=prior_std)
+    FILE_NAME = get_filename(
+        delta=delta,
+        learn_base=LEARN_BASE, act=ACT, num_rollouts=num_rollouts, prior_std=prior_std)
+    assert not FILE_NAME is None, num_rollouts
 
     # ----- Load -----
     # load training setup
@@ -151,12 +186,6 @@ for num_rollouts in S:
         assert (1, num_params)==nfm_loaded['q0.loc'].shape
         assert (1, num_params)==nfm_loaded['q0.log_scale'].shape
         q0 = nf.distributions.DiagGaussian(num_params)
-        # print(q0.loc[0,0])
-        # state_dict = q0.state_dict()
-        # state_dict['loc'] = nfm_loaded['q0.loc']
-        # state_dict['log_scale'] = torch.zeros(1, num_params)#nfm_loaded['q0.log_scale']
-        # q0.load_state_dict(state_dict)
-        # print(q0.loc[0,0])
     else:
         raise NotImplementedError
 
@@ -182,12 +211,6 @@ for num_rollouts in S:
     nfm.load_state_dict(nfm_loaded)
     nfm.to(device)  # Move model on GPU if available
 
-    p, _ = nfm.sample(num_samples_nf_eval)
-    print(max(p.sum(dim=0)/num_samples_nf_eval))
-    exit()
-    # print('q0 loc after load ', nfm.q0.loc[0,0])
-    # print('q0 scale after load ', torch.exp(nfm.q0.log_scale[0,0]))
-
     # ------------ 8. Test Results ------------
     print('\n[INFO] evaluating the trained flow on %i test rollouts.' % test_data.shape[0])
     test_loss, test_num_col = eval_norm_flow(
@@ -195,15 +218,23 @@ for num_rollouts in S:
         num_samples=num_samples_nf_eval, loss_fn=bounded_loss_fn,
         count_collisions=setup_loaded['col_av'], return_av=False
     )
-    print('test_loss', sum(test_loss)/num_samples_nf_eval)
+    print('test_loss', sum(test_loss).item()/num_samples_nf_eval)
 
     # ------------ 9. UB on UB ------------
     lambda_ = setup_loaded['gibbs_lambda']
-    print('lambda_', lambda_)
-    C = setup_loaded['loss_bound']
-    ub_const = 1/lambda_*math.log(1/delta) + lambda_*C**2/8/num_rollouts
+
+    # ------------ Mc Diarmid ------------
+    mcdim_ub = get_mcdim_ub(
+        sys=sys, ctl_generic=ctl_generic, train_data=train_data, bounded_loss_fn=bounded_loss_fn,
+        prior=gibbs_posteior.prior, delta=delta, lambda_=lambda_, C=setup_loaded['loss_bound'],
+        num_prior_samples=10000, deltahat=delta
+    )
+
+
 
 #     # ------------ WRONG ub on ub ------------
+#     C = setup_loaded['loss_bound']
+#     ub_const = 1/lambda_*math.log(1/delta) + lambda_*C**2/8/num_rollouts
 #     train_loss, _ = eval_norm_flow(
 #         nfm=nfm, sys=sys, ctl_generic=ctl_generic, data=train_data,
 #         num_samples=num_samples_nf_eval, loss_fn=bounded_loss_fn,
@@ -232,9 +263,9 @@ for num_rollouts in S:
 #     #     1/lambda_*math.log(sum(exp_neg_loss) + (math.exp(-lambda_*C)-1)*(math.log(1/deltahat)/2/num_prior_samples)**0.5)
 
     # # ------------ swapping denom ------------
-    # # ctl_generic.c_ren.hard_reset() # TODO
+    # # ctl_generic.c_ren.hard_reset()
 
-    # num_samples = 100 #TODO
+    # num_samples = 100
     # sample_from = 'nf_post' #'prior' # 'nf_post'
 
     # msg = 'Approximating the partition function (Z) using {:.0f} samples '.format(
@@ -296,43 +327,19 @@ for num_rollouts in S:
     # )
 
 
-    # ------------ Mc Diarmid ------------
-    deltahat = delta
-    n_p_min = math.ceil(
-        (1-math.exp(-lambda_*C)/lambda_/C)**2 * math.log(1/deltahat) / 2
-    )
-    print('Need minimum {:d} samples'.format(n_p_min))
-
-    ctl_generic.reset()
-    ctl_generic.c_ren.hard_reset()
-    num_prior_samples = max(5000, n_p_min)
-
-    prior_samples = gibbs_posteior.prior.sample(torch.Size([num_prior_samples]))
-    train_loss_prior_samples, _ = eval_norm_flow(
-        sys=sys, ctl_generic=ctl_generic, data=train_data,
-        num_samples=None, params=prior_samples, nfm=None,
-        loss_fn=bounded_loss_fn,
-        count_collisions=setup_loaded['col_av'], return_av=False
-    )
-    Z_hat = sum(torch.exp(-lambda_*train_loss_prior_samples))/num_prior_samples
-
-    epsilon = (1-math.exp(-lambda_*C)) * (math.log(1/deltahat)/num_prior_samples/2)**0.5
-    mcdim_ub = ub_const - 1/lambda_*math.log(Z_hat) + 1/lambda_*epsilon
-    print( - 1/lambda_*math.log(Z_hat), min(train_loss_prior_samples).item())
 
     for i in range(num_samples_nf_eval):
         results['delta'][row_num] = delta
         results['number of training rollouts'][row_num] = num_rollouts
         results['test loss'][row_num] = test_loss[i].item()
         results['test num collisions'][row_num] = test_num_col[i]
-        results['ub on ub'][row_num] = mcdim_ub
-        results['ub const'][row_num] = ub_const
-        results['-1/lambda ln(Zhat)'] = - 1/lambda_*math.log(Z_hat)
+        results['ub on ub'][row_num] = mcdim_ub.item()
+        # results['ub const'][row_num] = ub_const.item()
+        # results['-1/lambda ln(Zhat)'] = (- 1/lambda_*math.log(Z_hat_norm) + mean_loss).item()
         # results['ub on ub wrong'][row_num] = ub_on_ub_wrong[i].to(torch.device('cpu'))
         # results['ub uniform'][row_num] = ub_uniform.item()
         # results['ub unnormpost'][row_num] = ub_unnormpost.item()
         row_num += 1
-
 # ------------------
 # ------ PLOT ------
 # ------------------

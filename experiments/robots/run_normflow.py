@@ -135,7 +135,6 @@ else:
         prior_dict[name+'_scale'] = args.prior_std
 
 # ------------ 6. Posterior ------------
-
 # define target distribution
 gibbs_posteior = GibbsPosterior(
     loss_fn=bounded_loss_fn, lambda_=args.gibbs_lambda, prior_dict=prior_dict,
@@ -214,8 +213,6 @@ elif args.base_center_emp:
     state_dict['loc'] = torch.Tensor(mean.reshape(1, -1))
     # state_dict['log_scale'] = state_dict['log_scale'] - 100 # TODO
     state_dict['log_scale'] = torch.log(torch.abs(state_dict['loc'])*STD_SCALE) # TODO
-    print('stddev', torch.exp(state_dict['log_scale'][0][0:10]))
-    print('loaded mean', mean[0:10])
     q0.load_state_dict(state_dict)
 else:
     state_dict = q0.state_dict()
@@ -395,3 +392,34 @@ with torch.no_grad():
         obstacle_covs=bounded_loss_fn.obstacle_covs,
         plot_collisions=True, min_dist=bounded_loss_fn.min_dist
     )
+
+# ------------ Mc Diarmid ------------
+logger.info('\nComputing the upper bound...')
+
+    # n_p_min = math.ceil(
+    #     (1-math.exp(-lambda_*C)/lambda_/C)**2 * math.log(1/deltahat) / 2
+    # )
+    # print('Need minimum {:d} samples'.format(n_p_min))
+
+ctl_generic.reset()
+ctl_generic.c_ren.hard_reset()
+num_prior_samples = 1000
+
+prior_samples = gibbs_posteior.prior.sample(torch.Size([num_prior_samples]))
+train_loss_prior_samples, _ = eval_norm_flow(
+    sys=sys, ctl_generic=ctl_generic, data=train_data,
+    num_samples=None, params=prior_samples, nfm=None,
+    loss_fn=bounded_loss_fn,
+    count_collisions=args.col_av, return_av=False
+)
+
+lambda_=args.gibbs_lambda
+delta = args.delta
+deltahat=delta
+ub_const = 1/lambda_*math.log(1/delta) + lambda_*loss_bound**2/8/args.num_rollouts
+min_loss = min(train_loss_prior_samples)#/num_prior_samples
+Z_hat_norm = sum(torch.exp(-lambda_*(train_loss_prior_samples-min_loss)))/num_prior_samples
+epsilon = (1-math.exp(-lambda_*loss_bound)) * (math.log(1/deltahat)/num_prior_samples/2)**0.5
+mcdim_ub = ub_const - 1/lambda_*math.log(Z_hat_norm) + min_loss + 1/lambda_*epsilon
+
+logger.info('bound for delta=deltahat={:.2f} is {:.2f}'.format(delta, mcdim_ub.item()))
