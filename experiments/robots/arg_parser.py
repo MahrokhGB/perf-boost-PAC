@@ -57,6 +57,10 @@ def argument_parser():
     parser.add_argument('--delta', type=float, default=0.1 , help='Delta for Gibbs distribution. PAC bounds hold with prob >= 1- delta. Default is 0.1.')
     parser.add_argument('--gibbs-lambda', type=float, default=None , help='Lambda is the tempretaure of the Gibbs distribution. Default is lambda_star (see the paper).')
 
+    # data-dependent prior
+    parser.add_argument('--data-dep-prior', type=str2bool, default=False, help='LEarn the prior from a subset of data. Default is False.')
+    parser.add_argument('--num-rollouts-prior', type=int, default=0, help='Number of rollouts used for training the prior.')
+
     # TODO: add the following
     # parser.add_argument('--patience-epoch', type=int, default=None, help='Patience epochs for no progress. Default is None which sets it to 0.2 * total_epochs.')
     # parser.add_argument('--lr-start-factor', type=float, default=1.0, help='Start factor of the linear learning rate scheduler. Default is 1.0.')
@@ -108,6 +112,12 @@ def argument_parser():
     else:
         args.layer_sizes = [int(i) for i in args.layer_sizes]
 
+    if args.data_dep_prior:
+        assert args.num_rollouts_prior > 0, 'some rollouts must be dedicated to training the prior, but num_rollouts_prior=0.'
+        assert args.num_rollouts_prior < args.num_rollouts, 'number of rollouts used for training the prior exceeds the total.'
+    else:
+        assert args.num_rollouts_prior==0, 'some rollouts were dedicated to training the prior (num_rollouts_prior >0), but the prior is not learned.'
+
     return args
 
 
@@ -133,6 +143,7 @@ def print_args(args, method='empirical'):
     msg += ' -- batch_size: %i' % args.batch_size + ', -- return best model for validation data among logged epochs:' + str(args.return_best)
 
     msg += '\n[INFO] Prior: prior std: %.2e' % args.prior_std
+    msg += (' -- learned from data using %i rollouts' % args.num_rollouts_prior) if args.data_dep_prior else ' -- data independent'
 
     msg += '\n[INFO] Gibbs: delta: %.2e' % args.delta + ' -- gibbs_lambda: %.2f' % args.gibbs_lambda
 

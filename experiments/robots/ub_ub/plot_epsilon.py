@@ -1,89 +1,12 @@
 import sys, os, math
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.optimize import fsolve, least_squares
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 print(BASE_DIR)
 sys.path.insert(1, BASE_DIR)
 
-
-def get_min_np(thresh, delta, lambda_, init_condition=10000, loss_bound=1, constrained=True):
-    '''
-    find n_p to have epsilon/lambda approx equal to thresh
-    '''
-    return get_relation(thresh=thresh, delta=delta, n_p=None, lambda_=lambda_, init_condition=init_condition, loss_bound=loss_bound, constrained=constrained)
-
-def get_max_lambda(thresh, delta, n_p, init_condition=10000, loss_bound=1, constrained=True):
-    '''
-    find lambda to have epsilon/lambda approx equal to thresh
-    '''
-    return get_relation(thresh=thresh, delta=delta, n_p=n_p, lambda_=None, init_condition=init_condition, loss_bound=loss_bound, constrained=constrained)
-
-def get_relation(thresh, delta, n_p=None, lambda_=None, init_condition=10000, loss_bound=1, constrained=True, max_tries=20):
-    '''
-    find n_p to have epsilon/lambda approx equal to thresh
-    of
-    find lambda to have epsilon/lambda approx equal to thresh
-    '''
-    assert (lambda_ is None or n_p is None) and not (lambda_ is None and n_p is None)
-    num_tries = 0
-    accepted = False
-    while not accepted:
-        # define function to solve
-        if lambda_ is None:
-            func = lambda x: thresh-get_epsilon(num_sampled_controllers=n_p, delta=delta, lambda_=x, loss_bound=loss_bound)/x
-            min_bound = 0
-        else:
-            func = lambda x: thresh-get_epsilon(num_sampled_controllers=x, delta=delta, lambda_=lambda_, loss_bound=loss_bound)/lambda_
-            min_bound = 1
-
-        # solve with current initial guess
-        if not constrained:
-            root = fsolve(func, x0=[init_condition])
-            root = max(min_bound, root[0])
-        else:
-            root = least_squares(func, x0=[init_condition], bounds = ((min_bound), (math.inf)))
-            root = max(min_bound, root.x[0])
-        # check error
-        error = func(root)
-        if abs(error) <= thresh/10:
-            accepted=True
-        else:
-            if num_tries>max_tries:
-                print('[Err] Could not find the solution for thresh = '+str(thresh))
-                exit()
-            else:
-                num_tries += 1
-            # update initial guess
-            if (error < 0 and n_p is None) or (error>0 and lambda_ is None):
-                init_condition = init_condition**1.05 if not init_condition==1 else init_condition*2
-                # init_condition = init_condition*2**10
-                print('Increased the initial guess')
-                if init_condition > 2**500:
-                    print('[Err] Could not find the solution for thresh = '+str(thresh))
-                    exit()
-            else:
-                init_condition = init_condition**0.95 if not init_condition==1 else init_condition/2
-                # init_condition = init_condition/2**10
-                print('Decreased the initial guess')
-                if init_condition < 2:
-                    print('[Err] Could not find the solution for thresh = '+str(thresh))
-                    exit()
-
-    if n_p is None:
-        root = round(root)
-
-    return root
-
-def get_epsilon(num_sampled_controllers, delta, lambda_, loss_bound=1):
-    assert num_sampled_controllers>=1, num_sampled_controllers
-    term1 = (num_sampled_controllers/2*math.log(1/delta))**0.5
-    try:
-        exp_lambda_c = math.exp(lambda_*loss_bound)
-        return term1 * math.log(1+(exp_lambda_c-1)/num_sampled_controllers)
-    except:
-        return (num_sampled_controllers/2*math.log(1/delta))**0.5 * (lambda_*loss_bound - math.log(num_sampled_controllers))
+from ub_utils import get_epsilon, get_min_np, get_max_lambda
 
 # S = 32
 deltas = [0.01, 0.05, 0.1, 0.2]
@@ -97,7 +20,7 @@ threshs = np.linspace(0.1, 0.5, 20)
 # plot required N_p to have epsilon <= thresh
 print('\n------ plot required N_p to have epsilon <= thresh ------')
 init_conditions =np.logspace(1, len(lambdas), num=len(lambdas), base=2)
-# [2^5]*int(len(lambdas)/2) + [2^10]*(len(lambdas)-int(len(lambdas)/2))
+# [2**5]*int(len(lambdas)/2) + [2**10]*(len(lambdas)-int(len(lambdas)/2))
 fig, axs = plt.subplots(2, 2, figsize=(12, 8))
 min_nps = np.zeros((len(deltas), len(lambdas), len(threshs)))
 for delta_ind, delta in enumerate(deltas):
@@ -147,7 +70,7 @@ for delta_ind, delta in enumerate(deltas):
     Nps = np.linspace(1, 5*np.min(min_nps[delta_ind, :, :]), num=100)
     ax = axs.flatten()[delta_ind]
     for lambda_ind, lambda_ in enumerate(lambdas):
-        epsilon_over_lambda = [get_epsilon(num_sampled_controllers=Np, delta=delta, lambda_=lambda_)/lambda_ for Np in Nps]
+        epsilon_over_lambda = [get_epsilon(num_prior_samples=Np, delta=delta, lambda_=lambda_)/lambda_ for Np in Nps]
         ax.plot(Nps, epsilon_over_lambda, label=lambda_)
         ax.set_title('delta = ' + str(delta))
         ax.set_xlabel(r'num sampled priors ($N_p$)')

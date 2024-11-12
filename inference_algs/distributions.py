@@ -3,6 +3,7 @@ from collections import OrderedDict
 from torch.func import stack_module_state, functional_call
 from pyro.distributions import Normal, Uniform
 from torch.distributions import Distribution
+from collections.abc import Iterable
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(1, BASE_DIR)
@@ -117,8 +118,13 @@ class GibbsPosterior():
                 if prior_dict['type'] == 'Gaussian':
                     if not (name+'_loc' in prior_dict.keys() or name+'_scale' in prior_dict.keys()):
                         self.logger.info('[WARNING]: prior for ' + name + ' was not provided. Replaced by default.')
+                    loc_val = prior_dict.get(name+'_loc', 0)
+                    if isinstance(loc_val, Iterable):
+                        loc_val = loc_val.flatten().to(device)
+                    else:
+                        loc_val = loc_val*torch.ones(nelement, device=device)
                     dist = Normal(
-                        loc=prior_dict.get(name+'_loc', 0)*torch.ones(nelement, device=device),
+                        loc=loc_val,
                         scale=prior_dict.get(name+'_scale', 1)*torch.ones(nelement, device=device)
                     )
                 # Uniform prior

@@ -1,6 +1,5 @@
-import sys, os, torch, math
+import sys, os, torch
 import numpy as np
-import seaborn as sns
 import matplotlib.pyplot as plt
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -8,42 +7,13 @@ print(BASE_DIR)
 sys.path.insert(1, BASE_DIR)
 
 from config import device
-from inference_algs.normflow_assist import eval_norm_flow
 from plants import RobotsSystem, RobotsDataset
 from controllers import PerfBoostController
 from loss_functions import RobotsLossMultiBatch
 from inference_algs.distributions import GibbsPosterior
+from ub_utils import get_neg_log_zhat_over_lambda
 
-def get_neg_zhat_over_lambda(sys, ctl_generic, train_data, bounded_loss_fn, prior_samples, lambda_):
-
-    ctl_generic.reset()
-    ctl_generic.c_ren.hard_reset()
-
-    # evaluate samples controllers
-    num_prior_samples = prior_samples.shape[0]
-    train_loss_prior_samples = torch.zeros(num_prior_samples)
-    for r in range(math.ceil(num_prior_samples/1000)):
-        end_ind = min((r+1)*1000, num_prior_samples)
-        tmp, _ = eval_norm_flow(
-            sys=sys, ctl_generic=ctl_generic, data=train_data,
-            num_samples=None,nfm=None,
-            params=prior_samples[r*1000:end_ind],
-            loss_fn=bounded_loss_fn,
-            count_collisions=True, return_av=False
-        )
-        train_loss_prior_samples[r*1000:end_ind] = tmp
-    assert end_ind==num_prior_samples
-
-    # compute -1/lambda ln(Zhat)
-    mean_loss = min(train_loss_prior_samples)#/num_prior_samples
-    Z_hat_norm = sum(torch.exp(-lambda_*(train_loss_prior_samples-mean_loss)))/num_prior_samples
-    log_Z_hat = math.log(Z_hat_norm) - lambda_*mean_loss
-    return - 1/lambda_*log_Z_hat
-
-
-
-delta = 0.1
-prior_std = 7
+prior_std = 3
 # S = np.logspace(start=3, stop=11, num=9, dtype=int, base=2)
 # S = [256]
 S = np.logspace(start=3, stop=8, num=6, dtype=int, base=2)
@@ -102,7 +72,7 @@ gibbs_posteior = GibbsPosterior(
     logger=None,
 )
 prior = gibbs_posteior.prior
-num_prior_samples = 2^20
+num_prior_samples = 2**9
 prior_samples = prior.sample(torch.Size([num_prior_samples]))
 
 # ---------------------------------
@@ -112,19 +82,25 @@ if len(S)<=6:
 else:
     fig, axs = plt.subplots(3, 3, figsize=(12, 12))
 
-lambda_factors = [1/16, 1/8]#np.logspace(start=-4, stop=2, num=7, base=2)
+lambda_factors = np.logspace(start=-4, stop=2, num=7, base=2)
 for s_ind, num_rollouts in enumerate(S):
     ax = axs.flatten()[s_ind]
-    lambdas = [l*num_rollouts for l in lambda_factors]
+    lambdas = np.linspace(0.1, 1000, num=20)
+    # lambdas = [l*num_rollouts for l in lambda_factors]
     # divide to train and test
     train_data, test_data = dataset.get_data(num_train_samples=num_rollouts, num_test_samples=500)
     train_data, test_data = train_data.to(device), test_data.to(device)
-
-    values = [get_neg_zhat_over_lambda(sys, ctl_generic, train_data, bounded_loss_fn, prior_samples, lambda_) for lambda_ in lambdas]
+    values, stats = [None]*len(lambdas), [None]*len(lambdas)
+    for lambda_ind, lambda_ in enumerate(lambdas):
+        values[lambda_ind], stats[lambda_ind] = get_neg_log_zhat_over_lambda(sys, ctl_generic, train_data, bounded_loss_fn, prior_samples, lambda_)
+    # print(stats[0]['mean'])
     ax.plot(lambdas, values)
+    ax.plot(lambdas, [stats[i]['mean'] for i in range(len(lambdas))], label=r'mean $\hat{\mathcal{L}}(\boldsymbol{\theta}, \mathcal{S})$', c='k')
+    ax.plot(lambdas, [stats[i]['min'] for i in range(len(lambdas))], label=r'min $\hat{\mathcal{L}}(\boldsymbol{\theta}, \mathcal{S})$', c='k')
     ax.set_title('number of rollouts = '+str(num_rollouts))
     ax.set_xlabel(r'$\lambda$')
-    ax.set_ylabel(r'$-1/\lambda \ln (\hat{Z})')
+    ax.set_ylabel(r'$-1/\lambda \ln (\hat{Z})$')
+    print('Computing completed for number of rollouts = '+str(num_rollouts))
 
 # save the image
 plt.tight_layout()

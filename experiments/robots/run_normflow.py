@@ -1,6 +1,8 @@
-import sys, os, logging, torch, time
+import sys, os, logging, torch, time, math
+from tqdm import tqdm
 from datetime import datetime
 from torch.utils.data import DataLoader
+import normflows as nf
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 print(BASE_DIR)
@@ -15,12 +17,8 @@ from controllers import PerfBoostController, AffineController, NNController
 from loss_functions import RobotsLossMultiBatch
 from utils.assistive_functions import WrapLogger
 from inference_algs.distributions import GibbsPosterior
-
-# NEW
-import math
-from tqdm import tqdm
+from ub_ub.ub_utils import get_max_lambda
 from inference_algs.normflow_assist.mynf import NormalizingFlow
-import normflows as nf
 from inference_algs.normflow_assist import GibbsWrapperNF
 
 TRAIN_METHOD = 'normflow'
@@ -51,6 +49,12 @@ dataset = RobotsDataset(random_seed=args.random_seed, horizon=args.horizon, std_
 # divide to train and test
 train_data, test_data = dataset.get_data(num_train_samples=args.num_rollouts, num_test_samples=500)
 train_data, test_data = train_data.to(device), test_data.to(device)
+# remove data used for training the prior
+if args.data_dep_prior:
+    num_train_rollouts = args.num_rollouts - args.num_rollouts_prior
+    train_data = train_data[args.num_rollouts_prior:, :]    # remove samples used for training the prior from the posterior train data
+else:
+    num_train_rollouts = args.num_rollouts
 # data for plots
 t_ext = args.horizon * 4
 plot_data = torch.zeros(1, t_ext, train_data.shape[-1], device=device)
@@ -58,7 +62,7 @@ plot_data[:, 0, :] = (dataset.x0.detach() - dataset.xbar)
 plot_data = plot_data.to(device)
 # batch the data
 # NOTE: for normflow, must use all the data at each iter b.c. otherwise, the target distribution changes.
-train_dataloader = DataLoader(train_data, batch_size=min(args.num_rollouts, 256), shuffle=False)
+train_dataloader = DataLoader(train_data, batch_size=min(num_train_rollouts, 256), shuffle=False)
 
 # ------------ 2. Plant ------------
 plant_input_init = None     # all zero
@@ -128,16 +132,32 @@ if args.cont_type in ['Affine', 'NN']:
         'bias_loc':0, 'bias_scale':5,
     }
 else:
+    if args.data_dep_prior:
+        if args.dim_nl==8 and args.dim_internal==8:
+            if args.num_rollouts_prior==5:
+                filename_load = os.path.join(save_path, 'empirical', 'PerfBoost_11_10_15_46_03', 'trained_controller.pt')
+                res_dict_loaded = torch.load(filename_load)
     prior_dict = {'type':'Gaussian'}
     training_param_names = ['X', 'Y', 'B2', 'C2', 'D21', 'D22', 'D12']
     for name in training_param_names:
-        prior_dict[name+'_loc'] = 0
+        if args.data_dep_prior:
+            prior_dict[name+'_loc'] = res_dict_loaded[name]
+        else:
+            prior_dict[name+'_loc'] = 0
         prior_dict[name+'_scale'] = args.prior_std
+        print(prior_dict[name+'_scale'])
 
 # ------------ 6. Posterior ------------
+# use max lambda s.t. eps/lambda <= thresh
+thresh_eps_lambda = 0.2
+num_prior_samples = 10**6
+lambda_max_eps = get_max_lambda(thresh=thresh_eps_lambda, delta=args.delta, n_p=num_prior_samples, init_condition=20, loss_bound=loss_bound)    #TODO
+logger.info('lambda_max_eps = '+str(lambda_max_eps))
 # define target distribution
 gibbs_posteior = GibbsPosterior(
-    loss_fn=bounded_loss_fn, lambda_=args.gibbs_lambda, prior_dict=prior_dict,
+    loss_fn=bounded_loss_fn,
+    lambda_=lambda_max_eps, # args.gibbs_lambda, # TODO
+    prior_dict=prior_dict,
     # attributes of the CL system
     controller=ctl_generic, sys=sys,
     # misc
@@ -149,13 +169,17 @@ target = GibbsWrapperNF(
     target_dist=gibbs_posteior, train_dataloader=train_dataloader,
     prop_scale=torch.tensor(6.0), prop_shift=torch.tensor(-3.0)
 )
+tmp = gibbs_posteior.prior.sample(torch.Size([100,]))
+print(tmp.mean(dim=0)[0:10])
+print(tmp.std(dim=0)[0:10])
+# exit()
 
 # ------------ 7. save setup ------------
 setup_dict = vars(args)
 setup_dict['sat_bound'] = sat_bound
 setup_dict['loss_bound'] = loss_bound
 setup_dict['prior_dict'] = prior_dict
-setup_dict['gibbs_lambda'] = args.gibbs_lambda
+setup_dict['gibbs_lambda'] = gibbs_posteior.lambda_
 torch.save(setup_dict, os.path.join(save_folder, 'setup'))
 
 # ------------ 8. NormFlows ------------
@@ -192,7 +216,7 @@ q0 = nf.distributions.DiagGaussian(num_params, trainable=args.learn_base)
 if args.base_is_prior:
     state_dict = q0.state_dict()
     state_dict['loc'] = gibbs_posteior.prior.mean().reshape(1, -1)
-    state_dict['log_scale'] = gibbs_posteior.prior.stddev().reshape(1, -1)
+    state_dict['log_scale'] = torch.log(gibbs_posteior.prior.stddev().reshape(1, -1))
     q0.load_state_dict(state_dict)
 # base distribution same as the prior
 elif args.base_center_emp:
@@ -249,9 +273,11 @@ with torch.no_grad():
             obstacle_covs=bounded_loss_fn.obstacle_covs,
             plot_collisions=True, min_dist=bounded_loss_fn.min_dist
         )
+        print(dist_name, ' mean ', z_mean[0:10])
+        print(dist_name, ' std ', torch.std(z, dim=0)[0:10])
 
 # evaluate on the train data
-logger.info('\n[INFO] evaluating the base distribution on %i training rollouts.' % args.num_rollouts)
+logger.info('\n[INFO] evaluating the base distribution on %i training rollouts.' % num_train_rollouts)
 train_loss, train_num_col = eval_norm_flow(
     nfm=q0, sys=sys, ctl_generic=ctl_generic, data=train_data,
     num_samples=num_samples_nf_eval, loss_fn=bounded_loss_fn, count_collisions=args.col_av
@@ -261,7 +287,7 @@ if args.col_av:
     msg += ' -- Average number of collisions = %i' % train_num_col
 logger.info(msg)
 # evaluate on the train data
-logger.info('\n[INFO] evaluating the initial flow on %i training rollouts.' % args.num_rollouts)
+logger.info('\n[INFO] evaluating the initial flow on %i training rollouts.' % num_train_rollouts)
 train_loss, train_num_col = eval_norm_flow(
     nfm=nfm, sys=sys, ctl_generic=ctl_generic, data=train_data,
     num_samples=num_samples_nf_eval, loss_fn=bounded_loss_fn, count_collisions=args.col_av
@@ -307,7 +333,8 @@ with tqdm(range(args.epochs)) as t:
                 )
                 # evaluate mean of sampled controllers
                 z_mean = torch.mean(z, axis=0).reshape(1, -1)
-                print(z_mean[0,0:10])
+                print('mean ', z_mean[0,0:10])
+                print('std ', torch.std(z, axis=0)[0:10])
                 loss_z_mean, xs_z_mean = eval_norm_flow(
                     sys=sys, ctl_generic=ctl_generic, data=train_data,
                     loss_fn=bounded_loss_fn, count_collisions=False, return_traj=True, params=z_mean
@@ -350,7 +377,7 @@ with tqdm(range(args.epochs)) as t:
 
 # ------ 11. evaluate the trained model ------
 # evaluate on the train data
-logger.info('\n[INFO] evaluating the trained flow on %i training rollouts.' % args.num_rollouts)
+logger.info('\n[INFO] evaluating the trained flow on %i training rollouts.' % num_train_rollouts)
 train_loss, train_num_col = eval_norm_flow(
     nfm=nfm, sys=sys, ctl_generic=ctl_generic, data=train_data,
     num_samples=num_samples_nf_eval, loss_fn=bounded_loss_fn, count_collisions=args.col_av
@@ -393,33 +420,3 @@ with torch.no_grad():
         plot_collisions=True, min_dist=bounded_loss_fn.min_dist
     )
 
-# ------------ Mc Diarmid ------------
-logger.info('\nComputing the upper bound...')
-
-    # n_p_min = math.ceil(
-    #     (1-math.exp(-lambda_*C)/lambda_/C)**2 * math.log(1/deltahat) / 2
-    # )
-    # print('Need minimum {:d} samples'.format(n_p_min))
-
-ctl_generic.reset()
-ctl_generic.c_ren.hard_reset()
-num_prior_samples = 1000
-
-prior_samples = gibbs_posteior.prior.sample(torch.Size([num_prior_samples]))
-train_loss_prior_samples, _ = eval_norm_flow(
-    sys=sys, ctl_generic=ctl_generic, data=train_data,
-    num_samples=None, params=prior_samples, nfm=None,
-    loss_fn=bounded_loss_fn,
-    count_collisions=args.col_av, return_av=False
-)
-
-lambda_=args.gibbs_lambda
-delta = args.delta
-deltahat=delta
-ub_const = 1/lambda_*math.log(1/delta) + lambda_*loss_bound**2/8/args.num_rollouts
-min_loss = min(train_loss_prior_samples)#/num_prior_samples
-Z_hat_norm = sum(torch.exp(-lambda_*(train_loss_prior_samples-min_loss)))/num_prior_samples
-epsilon = (1-math.exp(-lambda_*loss_bound)) * (math.log(1/deltahat)/num_prior_samples/2)**0.5
-mcdim_ub = ub_const - 1/lambda_*math.log(Z_hat_norm) + min_loss + 1/lambda_*epsilon
-
-logger.info('bound for delta=deltahat={:.2f} is {:.2f}'.format(delta, mcdim_ub.item()))
