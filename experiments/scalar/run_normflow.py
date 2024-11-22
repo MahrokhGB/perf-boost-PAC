@@ -15,7 +15,7 @@ from loss_functions import LQLossFH
 from utils.assistive_functions import WrapLogger, sample_2d_dist
 
 import math
-from tqdm import tqdm
+from tqdm.auto import tqdm      # TODO train with train_normflow
 import normflows as nf
 from inference_algs.Gibbs2d_assistive_functions import *
 from inference_algs.distributions import GibbsPosterior

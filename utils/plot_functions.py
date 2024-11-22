@@ -1,4 +1,4 @@
-import torch, os, itertools
+import torch, os
 import numpy as np
 import seaborn as sns
 from datetime import datetime
@@ -20,6 +20,9 @@ def plot_trajectories(
     if x.ndim==2:
         x = x.reshape(1, *x.shape)
     num_trajs = x.shape[0]
+
+    # flatten xbar
+    xbar=xbar.squeeze()
 
     filename = 'trajectories.pdf' if filename == '' else filename
 

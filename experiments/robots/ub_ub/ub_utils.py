@@ -1,10 +1,12 @@
 import sys, os, torch, math
+import normflows as nf
 from scipy.optimize import fsolve, least_squares
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 print(BASE_DIR)
 sys.path.insert(1, BASE_DIR)
 
+from inference_algs.normflow_assist.mynf import NormalizingFlow
 from inference_algs.normflow_assist import eval_norm_flow
 
 def get_neg_log_zhat_over_lambda(
@@ -21,7 +23,10 @@ def get_neg_log_zhat_over_lambda(
         stats={'mean':0, 'min':1e6}
     while sample_counter<num_prior_samples:
         samples_in_batch = min(batch_size, num_prior_samples-sample_counter)
-        prior_samples = prior.sample(torch.Size([samples_in_batch]))
+        if isinstance(prior, NormalizingFlow) or isinstance(prior, nf.NormalizingFlow):
+            prior_samples, _ = prior.sample(samples_in_batch)
+        else:
+            prior_samples = prior.sample(torch.Size([samples_in_batch]))
         # evaluate samples controllers
         ctl_generic.reset()
         ctl_generic.c_ren.hard_reset()
@@ -181,6 +186,7 @@ def get_mcdim_ub(
     else:
         neg_log_zhat_over_lambda = torch.Tensor([0])
 
+    neg_log_zhat_over_lambda = neg_log_zhat_over_lambda.item()
     mcdim_ub = {
         'tot':neg_log_zhat_over_lambda + epsilon/lambda_ + ub_const,
         'neg_log_zhat_over_lambda':neg_log_zhat_over_lambda,
