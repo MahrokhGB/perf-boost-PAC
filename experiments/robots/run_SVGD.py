@@ -144,7 +144,7 @@ gibbs_posteior = GibbsPosterior(
 # ****** INIT SVGD ******
 num_particles = 1
 # lr = 1e-2
-early_stopping = True
+return_best = True
 # initialize trainable params
 initialization_std = 0.1 if args.obst_av else 1.0
 dim = (num_particles, ctl_generic.num_params)
@@ -167,7 +167,7 @@ logger.info('------------ Begin training ------------')
 svgd_cont.fit(
     dataloader=train_dataloader,
     over_fit_margin=None, cont_fit_margin=None, max_iter_fit=None,
-    early_stopping=early_stopping, log_period=args.log_epoch, epochs=args.epochs,
+    return_best=return_best, log_period=args.log_epoch, epochs=args.epochs,
     valid_data=train_data   # NOTE: validate model using the entire train data
 )
 logger.info('Training completed.')

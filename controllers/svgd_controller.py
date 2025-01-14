@@ -115,7 +115,7 @@ class SVGDCont():
 
     # ---------- FIT ----------
     def fit(self, dataloader, epochs, over_fit_margin=None, cont_fit_margin=None, max_iter_fit=None,
-            early_stopping=True, valid_data=None, log_period=500):
+            return_best=True, valid_data=None, log_period=500):
         """
         fits the hyper-posterior particles with SVGD
 
@@ -125,7 +125,7 @@ class SVGDCont():
              to disable early stopping)
             cont_fit_margin: continue training for more iters if slope of valid RMSE over one log_period<-cont_fit_margin
             max_iter_fit: max iters to extend training
-            early_stopping: return model at an evaluated iteration with the lowest valid RMSE
+            return_best: return model at an evaluated iteration with the lowest valid RMSE
             valid_data: list of valid tuples, i.e. [(test_context_x_1, test_context_t_1, test_x_1, test_t_1), ...]
             log_period (int) number of steps after which to print stats
         """
@@ -138,7 +138,7 @@ class SVGDCont():
         # (S, T, num_states) = data.shape
         # assert T == loss.T
 
-        if early_stopping:
+        if return_best:
             self.best_particles = None
             min_criterion = 1e6
 
@@ -215,8 +215,8 @@ class SVGDCont():
                             epochs += log_period
                             message += '\n[Info] extended training'
 
-                    # update the best particles if early_stopping
-                    if early_stopping and itr > 1:
+                    # update the best particles if return_best
+                    if return_best and itr > 1:
                         if valid_results[-1] < min_criterion:
                             # self.logger.info('update best particle according to '+'train' if valid_data is None else 'valid')
                             min_criterion = valid_results[-1]
@@ -245,5 +245,5 @@ class SVGDCont():
         self.fitted = True if not self.unknown_err else False
 
         # set back to the best particles if early stopping
-        if early_stopping and (not self.best_particles is None):
+        if return_best and (not self.best_particles is None):
             self.particles = self.best_particles

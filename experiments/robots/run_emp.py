@@ -35,9 +35,15 @@ torch.manual_seed(args.random_seed)
 
 # ------------ 1. Dataset ------------
 dataset = RobotsDataset(random_seed=args.random_seed, horizon=args.horizon, std_ini=args.std_init_plant, n_agents=2)
-# divide to train and test
+# generate train and test
 train_data, test_data = dataset.get_data(num_train_samples=args.num_rollouts, num_test_samples=500)
 train_data, test_data = train_data.to(device), test_data.to(device)
+# validation data
+if args.early_stopping or args.return_best:
+    valid_inds = torch.randperm(train_data.shape[0])[:int(args.validation_frac*train_data.shape[0])]
+    train_inds = [ind for ind in range(train_data.shape[0]) if ind not in valid_inds]
+    valid_data = train_data[valid_inds, :, :]
+    train_data = train_data[train_inds, :, :]
 # data for plots
 t_ext = args.horizon * 4
 plot_data = torch.zeros(1, t_ext, train_data.shape[-1], device=device)
@@ -107,9 +113,10 @@ original_loss_fn = RobotsLossMultiBatch(
 )
 
 # ------------ 5. Optimizer ------------
-valid_data = train_data      # use the entire train data for validation
-assert not (valid_data is None and args.return_best)
 optimizer = torch.optim.Adam(ctl_generic.parameters(), lr=args.lr)
+# queue of validation losses for early stopping
+if args.early_stopping:
+    valid_imp_queue = [100]*args.n_logs_no_change   # don't stop at the beginning
 
 # ------------ 6. Training ------------
 # plot closed-loop trajectories before training the controller
@@ -144,9 +151,12 @@ for epoch in range(1+args.epochs):
     # print info
     if epoch%args.log_epoch == 0:
         msg = 'Epoch: %i --- batch train loss: %.2f'% (epoch, loss)
-        print(ctl_generic.get_parameters_as_vector()[0:10])
+        duration = time.time() - t
+        msg += ' ---||--- time: %.0f s' % (duration)
+        t = time.time()
+        # print(ctl_generic.get_parameters_as_vector()[0:10])
 
-        if args.return_best:
+        if args.return_best or args.early_stopping:
             # rollout the current controller on the valid data
             with torch.no_grad():
                 x_log_valid, _, u_log_valid = sys.rollout(
@@ -158,14 +168,25 @@ for epoch in range(1+args.epochs):
             msg += ' ---||--- validation loss: %.2f' % (original_loss_valid.item())
             msg += ' ---||--- bounded validation loss: %.2f' % (bounded_loss_valid.item())
             # compare with the best valid loss
-            if original_loss_valid.item()<best_valid_loss:
+            imp = 100 * (best_valid_loss-original_loss_valid.item())/best_valid_loss
+            print('imp', imp)
+            if imp>0:
                 best_valid_loss = original_loss_valid.item()
-                best_params = ctl_generic.get_parameters_as_vector()  # record state dict if best on valid
-                msg += ' (best so far)'
-        duration = time.time() - t
-        msg += ' ---||--- time: %.0f s' % (duration)
+            if args.return_best:
+                    best_params = ctl_generic.get_parameters_as_vector()  # record state dict if best on valid
+                    msg += ' (best so far)'
+            if args.early_stopping:
+                # add the current valid loss to the queue
+                valid_imp_queue.pop(0)
+                valid_imp_queue.append(imp)
+                print('valid_imp_queue', valid_imp_queue)
+                # check if there is no improvement
+                if all([valid_imp_queue[i] <args.tol_percentage for i in range(args.n_logs_no_change)]):
+                    msg += ' ---||--- early stopping at epoch %i' % (epoch)
+                    logger.info(msg)
+                    break
         logger.info(msg)
-        t = time.time()
+        
 
 # set to best seen during training
 if args.return_best:

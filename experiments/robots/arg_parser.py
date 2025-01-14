@@ -22,7 +22,7 @@ def argument_parser():
     # controller
     parser.add_argument('--cont-type', type=str, default='Affine', help='Controller type. Can be Affine, NN, or PerfBoost. Default is Affine.')
     parser.add_argument('--cont-init-std', type=float, default=0.1 , help='Initialization std for controller params. Default is 0.1.')
-    # PerfBoost nontroller
+    # PerfBoost controller
     parser.add_argument('--dim-internal', type=int, default=8, help='Dimension of the internal state of the controller. Adjusts the size of the linear part of REN. Default is 8.')
     parser.add_argument('--dim-nl', type=int, default=8, help='size of the non-linear part of REN. Default is 8.')
     # NN controller
@@ -39,36 +39,32 @@ def argument_parser():
     parser.add_argument('--epochs', type=int, default=-1, help='Total number of epochs for training. Default is 5000 if collision avoidance, else 100.')
     parser.add_argument('--lr', type=float, default=-1, help='Learning rate. Default is 2e-3 if collision avoidance, else 5e-3.')
     parser.add_argument('--weight-decay', type=float, default=0, help='Weight decay for Adam optimizer. Default is 0.')
-    parser.add_argument('--log-epoch', type=int, default=-1, help='Frequency of logging in epochs. Default is 0.1 * epochs.')
+    parser.add_argument('--log-epoch', type=int, default=-1, help='Frequency of logging in epochs. Default is 0.05 * epochs.')
     parser.add_argument('--return-best', type=str2bool, default=True, help='Return the best model on the validation data among all logged iterations. The train data can be used instead of validation data. Default is True.')
-
+    # optimizer - early stopping
+    parser.add_argument('--early-stopping', type=str2bool, default=True, help='Stop SGD if validation loss does not significantly decrease.')
+    parser.add_argument('--validation-frac', type=float, default=0.25, help='Fraction of data used for validation. Default is 0.25.')
+    parser.add_argument('--n-logs-no-change', type=int, default=5, help='Early stopping if the validation loss does not improve by at least tol percentage during the last n_logs_no_change logged epochs. Default is 5.')
+    parser.add_argument('--tol-percentage', type=float, default=0.05, help='Early stopping if the validation loss does not improve by at least tol percentage during the last n_logs_no_change logged epochs. Default is 0.05%.')
+    
+    
     # inference
+    parser.add_argument('--prior-std', type=float, default=7, help='Gaussian prior std. Default is 7.')
+    # inference - normflow
     parser.add_argument('--flow-type', type=str, default='Planar', help='Flow type for normflow. Can be Planar, Radial, or NVP. Default is Planar.')
     parser.add_argument('--flow-activation', type=str, default='leaky_relu', help='Activation function of each flow for normflow. Can be tanh or leaky_relu. Default is leaky_relu.')
     parser.add_argument('--num-flows', type=int, default=16, help='Number of transforms in for normflow. Default is 16. Set to 0 for no transforms')
     parser.add_argument('--base-is-prior', type=str2bool, default=False, help='Base distribution for normflow is the same as the prior. Default is False.')
     parser.add_argument('--base-center-emp', type=str2bool, default=False, help='Base distribution for normflow is centered at the controller learned empirically. Default is False.')
     parser.add_argument('--learn-base', type=str2bool, default=True, help='Optimize base distribution of normflow. Default is True.')
-    parser.add_argument('--prior-std', type=float, default=7, help='Gaussian prior std. Default is 7.')
     parser.add_argument('--annealing', type=str2bool, default=False, help='Annealing loss for normflow. Default is False.')
     parser.add_argument('--anneal-iter', type=int, default=None, help='Annealing iteration for normflow. Default is half epochs.')
-
-    # Gibbs
+    # inference - Gibbs
     parser.add_argument('--delta', type=float, default=0.1 , help='Delta for Gibbs distribution. PAC bounds hold with prob >= 1- delta. Default is 0.1.')
     parser.add_argument('--gibbs-lambda', type=float, default=None , help='Lambda is the tempretaure of the Gibbs distribution. Default is lambda_star (see the paper).')
-
-    # data-dependent prior
+    # inference - data-dependent prior
     parser.add_argument('--data-dep-prior', type=str2bool, default=False, help='LEarn the prior from a subset of data. Default is False.')
     parser.add_argument('--num-rollouts-prior', type=int, default=0, help='Number of rollouts used for training the prior.')
-
-    # TODO: add the following
-    # parser.add_argument('--patience-epoch', type=int, default=None, help='Patience epochs for no progress. Default is None which sets it to 0.2 * total_epochs.')
-    # parser.add_argument('--lr-start-factor', type=float, default=1.0, help='Start factor of the linear learning rate scheduler. Default is 1.0.')
-    # parser.add_argument('--lr-end-factor', type=float, default=0.01, help='End factor of the linear learning rate scheduler. Default is 0.01.')
-    # # save/load args
-    # parser.add_argument('--experiment-dir', type=str, default='boards', help='Name tag for the experiments. By default it will be the "boards" folder.')
-    # parser.add_argument('--load-model', type=str, default=None, help='If it is not set to None, a pretrained model will be loaded instead of training.')
-    # parser.add_argument('--device', type=str, default="cuda:0" if torch.cuda.is_available() else "cpu", help='Device to run the computations on, "cpu" or "cuda:0". Default is "cuda:0" if available, otherwise "cpu".')
 
 
     args = parser.parse_args()
@@ -84,7 +80,7 @@ def argument_parser():
         args.lr = 2e-3 if args.col_av else 5e-3
 
     if args.log_epoch==-1 or args.log_epoch is None:
-        args.log_epoch = math.ceil(float(args.epochs)/10)
+        args.log_epoch = math.ceil(float(args.epochs)*0.05)
 
     if args.annealing and args.anneal_iter is None:
         args.anneal_iter = int(args.epochs/2)
@@ -101,9 +97,6 @@ def argument_parser():
     if not args.obst_av:
         args.alpha_obst = None
 
-    # if args.total_epochs < 10000:
-    #     print(f'Minimum of 10000 epochs are required for proper training')
-
     if args.horizon > 100:
         print(f'Long horizons may be unnecessary and pose significant computation')
 
@@ -117,6 +110,14 @@ def argument_parser():
         assert args.num_rollouts_prior < args.num_rollouts, 'number of rollouts used for training the prior exceeds the total.'
     else:
         assert args.num_rollouts_prior==0, 'some rollouts were dedicated to training the prior (num_rollouts_prior >0), but the prior is not learned.'
+
+    if args.return_best:
+        assert args.validation_frac > 0, 'validation fraction must be positive for return best.'
+        assert args.validation_frac < 1, 'validation fraction must be less than 1 for return best.'
+    if args.early_stopping:
+        assert args.validation_frac > 0, 'validation fraction must be positive for early stopping.'
+        assert args.validation_frac < 1, 'validation fraction must be less than 1 for early stopping.'
+
 
     return args
 
@@ -141,6 +142,11 @@ def print_args(args, method='empirical'):
 
     msg += '\n[INFO] Optimizer: lr: %.2e' % args.lr + ' -- weight decay: %.2e' % args.weight_decay
     msg += ' -- batch_size: %i' % args.batch_size + ', -- return best model for validation data among logged epochs:' + str(args.return_best)
+    if args.early_stopping:
+        msg += '\n Early stopping enabled with validation fraction: %.2f' % args.validation_frac
+        msg += ' -- n_logs_no_change: %i' % args.n_logs_no_change + ' -- tol percentage: %.2f' % args.tol_percentage
+    else:
+        msg += '\n Early stopping disabled'
 
     msg += '\n[INFO] Prior: prior std: %.2e' % args.prior_std
     msg += (' -- learned from data using %i rollouts' % args.num_rollouts_prior) if args.data_dep_prior else ' -- data independent'
