@@ -172,9 +172,9 @@ for epoch in range(1+args.epochs):
             print('imp', imp)
             if imp>0:
                 best_valid_loss = original_loss_valid.item()
-            if args.return_best:
-                    best_params = ctl_generic.get_parameters_as_vector()  # record state dict if best on valid
-                    msg += ' (best so far)'
+                if args.return_best:
+                        best_params = ctl_generic.get_parameters_as_vector()  # record state dict if best on valid
+                        msg += ' (best so far)'
             if args.early_stopping:
                 # add the current valid loss to the queue
                 valid_imp_queue.pop(0)

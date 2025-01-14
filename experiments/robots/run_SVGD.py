@@ -44,6 +44,12 @@ dataset = RobotsDataset(random_seed=args.random_seed, horizon=args.horizon, std_
 # divide to train and test
 train_data, test_data = dataset.get_data(num_train_samples=args.num_rollouts, num_test_samples=500)
 train_data, test_data = train_data.to(device), test_data.to(device)
+# validation data
+if args.early_stopping or args.return_best:
+    valid_inds = torch.randperm(train_data.shape[0])[:int(args.validation_frac*train_data.shape[0])]
+    train_inds = [ind for ind in range(train_data.shape[0]) if ind not in valid_inds]
+    valid_data = train_data[valid_inds, :, :]
+    train_data = train_data[train_inds, :, :]
 # data for plots
 t_ext = args.horizon * 4
 plot_data = torch.zeros(1, t_ext, train_data.shape[-1], device=device)
@@ -52,6 +58,7 @@ plot_data = plot_data.to(device)
 # batch the data
 train_dataloader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True) # TODO
 # train_dataloader = DataLoader(train_data, batch_size=args.num_rollouts, shuffle=False)
+# valid_dataloader = DataLoader(valid_data, batch_size=valid_data.shape[0], shuffle=True)
 
 # ------------ 2. Plant ------------
 plant_input_init = None     # all zero
@@ -168,7 +175,7 @@ svgd_cont.fit(
     dataloader=train_dataloader,
     over_fit_margin=None, cont_fit_margin=None, max_iter_fit=None,
     return_best=return_best, log_period=args.log_epoch, epochs=args.epochs,
-    valid_data=train_data   # NOTE: validate model using the entire train data
+    valid_data=valid_data
 )
 logger.info('Training completed.')
 
