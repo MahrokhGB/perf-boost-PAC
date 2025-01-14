@@ -50,6 +50,8 @@ def argument_parser():
     
     # inference
     parser.add_argument('--prior-std', type=float, default=7, help='Gaussian prior std. Default is 7.')
+    # inference - SVGD
+    parser.add_argument('--num-particles', type=int, default=1, help='Number of SVGD particles. Default is 1.')
     # inference - normflow
     parser.add_argument('--flow-type', type=str, default='Planar', help='Flow type for normflow. Can be Planar, Radial, or NVP. Default is Planar.')
     parser.add_argument('--flow-activation', type=str, default='leaky_relu', help='Activation function of each flow for normflow. Can be tanh or leaky_relu. Default is leaky_relu.')

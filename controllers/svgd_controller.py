@@ -116,7 +116,8 @@ class SVGDCont():
             return sum(losses)/self.num_particles
 
     # ---------- FIT ----------
-    def fit(self, train_dataloader, epochs, early_stopping=True, 
+    def fit(self, train_dataloader, epochs, 
+            early_stopping, tol_percentage=None, n_logs_no_change=None,
             return_best=True, valid_data=None, log_period=500):
         """
         fits the hyper-posterior particles with SVGD
@@ -139,9 +140,16 @@ class SVGDCont():
         if return_best:
             self.best_particles = None
             min_valid_res = 1e6
+        if early_stopping:
+            assert not tol_percentage is None, 'Tolerance percentage must be provided for early stopping'
+            assert not n_logs_no_change is None, 'Number of logs with no change must be provided for early stopping'
+            assert tol_percentage >= 0 and tol_percentage < 1, 'Tolerance percentage must be in [0, 1)'
         if early_stopping or return_best:
             assert not valid_data is None, 'Validation data must be provided for early stopping or return_best'
 
+        # queue of validation losses for early stopping
+        if early_stopping:
+            valid_imp_queue = [100]*n_logs_no_change   # don't stop at the beginning
 
         # initial evaluation on train data
         message = 'Iter %d/%d' % (0, epochs)
@@ -189,10 +197,23 @@ class SVGDCont():
                         self.unknown_err = True
 
                     # update the best particles if return_best
+                    imp = 100 * (min_valid_res-valid_res)/min_valid_res
                     if return_best and epoch > 1:
                         if valid_res < min_valid_res:
                             min_valid_res = valid_res
                             self.best_particles = self.particles.detach().clone()
+
+                    # early stopping
+                    if early_stopping:
+                        # add the current valid loss to the queue
+                        valid_imp_queue.pop(0)
+                        valid_imp_queue.append(imp)
+                        print('valid_imp_queue', valid_imp_queue)
+                        # check if there is no improvement
+                        if all([valid_imp_queue[i] <tol_percentage for i in range(n_logs_no_change)]):
+                            msg += ' ---||--- early stopping at epoch %i' % (epoch)
+                            self.logger.info(msg)
+                            break
 
                 # log info
                 self.logger.info(message)
