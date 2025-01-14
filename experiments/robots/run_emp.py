@@ -36,14 +36,16 @@ torch.manual_seed(args.random_seed)
 # ------------ 1. Dataset ------------
 dataset = RobotsDataset(random_seed=args.random_seed, horizon=args.horizon, std_ini=args.std_init_plant, n_agents=2)
 # generate train and test
-train_data, test_data = dataset.get_data(num_train_samples=args.num_rollouts, num_test_samples=500)
-train_data, test_data = train_data.to(device), test_data.to(device)
+train_data_full, test_data = dataset.get_data(num_train_samples=args.num_rollouts, num_test_samples=500)
+train_data_full, test_data = train_data_full.to(device), test_data.to(device)
 # validation data
 if args.early_stopping or args.return_best:
-    valid_inds = torch.randperm(train_data.shape[0])[:int(args.validation_frac*train_data.shape[0])]
-    train_inds = [ind for ind in range(train_data.shape[0]) if ind not in valid_inds]
-    valid_data = train_data[valid_inds, :, :]
-    train_data = train_data[train_inds, :, :]
+    valid_inds = torch.randperm(train_data_full.shape[0])[:int(args.validation_frac*train_data_full.shape[0])]
+    train_inds = [ind for ind in range(train_data_full.shape[0]) if ind not in valid_inds]
+    valid_data = train_data_full[valid_inds, :, :]
+    train_data = train_data_full[train_inds, :, :]
+else:
+    train_data = train_data_full
 # data for plots
 t_ext = args.horizon * 4
 plot_data = torch.zeros(1, t_ext, train_data.shape[-1], device=device)
@@ -201,10 +203,10 @@ torch.save(res_dict, filename)
 logger.info('[INFO] saved trained model.')
 
 # evaluate on the train data
-logger.info('\n[INFO] evaluating the trained controller on %i training rollouts.' % train_data.shape[0])
+logger.info('\n[INFO] evaluating the trained controller on %i training rollouts.' % train_data_full.shape[0])
 with torch.no_grad():
     x_log, _, u_log = sys.rollout(
-        controller=ctl_generic, data=train_data
+        controller=ctl_generic, data=train_data_full
     )   # use the entire train data, not a batch
     # evaluate losses
     loss = original_loss_fn.forward(x_log, u_log)
