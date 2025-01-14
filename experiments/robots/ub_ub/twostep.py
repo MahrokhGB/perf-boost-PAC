@@ -43,7 +43,7 @@ logger.setLevel(logging.DEBUG)
 logger = WrapLogger(logger)
 
 logger.info('---------- Two step training ----------\n')
-# logger.info(msg)  # TODO: ubcomment when adding argparser
+logger.info(msg)
 torch.manual_seed(args.random_seed)
 
 # ------------ 1. Basics ------------

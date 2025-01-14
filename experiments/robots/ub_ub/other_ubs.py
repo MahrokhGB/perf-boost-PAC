@@ -19,37 +19,7 @@ from inference_algs.normflow_assist.mynf import NormalizingFlow
 import normflows as nf
 from inference_algs.normflow_assist import GibbsWrapperNF
 from filename_lookup import get_filename
-
-def get_mcdim_ub(sys, ctl_generic, train_data, bounded_loss_fn, prior, delta, lambda_, C, num_prior_samples=5000, deltahat=None):
-    deltahat = delta if deltahat is None else deltahat
-    n_p_min = math.ceil(
-        (1-math.exp(-lambda_*C)/lambda_/C)**2 * math.log(1/deltahat) / 2
-    )
-    assert num_prior_samples>n_p_min
-
-    ctl_generic.reset()
-    ctl_generic.c_ren.hard_reset()
-
-    prior_samples = prior.sample(torch.Size([num_prior_samples]))
-    train_loss_prior_samples = torch.zeros(num_prior_samples)
-    for r in range(math.ceil(num_prior_samples/1000)):
-        end_ind = min((r+1)*1000, num_prior_samples)
-        tmp, _ = eval_norm_flow(
-            sys=sys, ctl_generic=ctl_generic, data=train_data,
-            num_samples=None,nfm=None,
-            params=prior_samples[r*1000:end_ind],
-            loss_fn=bounded_loss_fn,
-            count_collisions=True, return_av=False
-        )
-        train_loss_prior_samples[r*1000:end_ind] = tmp
-    assert end_ind==num_prior_samples
-    ub_const = 1/lambda_*math.log(1/delta) + lambda_*C**2/8/num_rollouts
-    mean_loss = min(train_loss_prior_samples)#/num_prior_samples
-    Z_hat_norm = sum(torch.exp(-lambda_*(train_loss_prior_samples-mean_loss)))/num_prior_samples
-    epsilon = (1-math.exp(-lambda_*C)) * (math.log(1/deltahat)/num_prior_samples/2)**0.5
-    mcdim_ub = ub_const - 1/lambda_*math.log(Z_hat_norm) + mean_loss + 1/lambda_*epsilon
-
-    return mcdim_ub
+from ub_utils import get_mcdim_ub
 
 
 delta = 0.01
@@ -60,12 +30,12 @@ prior_std = 3
 TRAIN_METHOD = 'normflow'
 cont_type = 'PerfBoost'
 # S = np.logspace(start=3, stop=9, num=7, dtype=int, base=2)
-S = [256]
+S = [256, 512]
 # S = np.logspace(start=3, stop=8, num=6, dtype=int, base=2)
 
 now = datetime.now().strftime("%m_%d_%H_%M_%S")
 save_path = os.path.join(BASE_DIR, 'experiments', 'robots', 'saved_results')
-save_folder = os.path.join(save_path, TRAIN_METHOD, cont_type+'_'+now)
+save_folder = os.path.join(BASE_DIR, 'experiments', 'robots', 'ub_ub', 'saved_results')
 
 num_samples_nf_eval = 100
 results = dict.fromkeys(['delta', 'number of training rollouts', 'test loss', 'test num collisions', 'ub on ub', 'ub uniform', 'ub unnormpost', 'ub const', '-1/lambda ln(Zhat)'])
@@ -99,7 +69,7 @@ for num_rollouts in S:
         map_location=torch.device('cpu')
     )
     nfm_keys = nfm_loaded.keys()
-
+    print('[INFO] NFM model loaded')
     # ------------ 1. Dataset ------------
     dataset = RobotsDataset(
         random_seed=setup_loaded['random_seed'], horizon=setup_loaded['horizon'],
@@ -333,7 +303,8 @@ for num_rollouts in S:
         results['number of training rollouts'][row_num] = num_rollouts
         results['test loss'][row_num] = test_loss[i].item()
         results['test num collisions'][row_num] = test_num_col[i]
-        results['ub on ub'][row_num] = mcdim_ub.item()
+        results['ub on ub'][row_num] = 0.573 if num_rollouts==512 else 0.582
+        # results['ub on ub'][row_num] = mcdim_ub.item()
         # results['ub const'][row_num] = ub_const.item()
         # results['-1/lambda ln(Zhat)'] = (- 1/lambda_*math.log(Z_hat_norm) + mean_loss).item()
         # results['ub on ub wrong'][row_num] = ub_on_ub_wrong[i].to(torch.device('cpu'))

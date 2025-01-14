@@ -143,7 +143,7 @@ for epoch in range(1+args.epochs):
 
     # print info
     if epoch%args.log_epoch == 0:
-        msg = 'Epoch: %i --- train loss: %.2f'% (epoch, loss)
+        msg = 'Epoch: %i --- batch train loss: %.2f'% (epoch, loss)
         print(ctl_generic.get_parameters_as_vector()[0:10])
 
         if args.return_best:

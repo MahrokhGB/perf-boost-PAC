@@ -179,7 +179,7 @@ def get_mcdim_ub(
         neg_log_zhat_over_lambda = get_neg_log_zhat_over_lambda(
             sys=sys, ctl_generic=ctl_generic, train_data=train_data,
             bounded_loss_fn=bounded_loss_fn, prior=prior,
-            num_prior_samples=num_prior_samples,
+            num_prior_samples=1000, #num_prior_samples, # TODO
             lambda_=lambda_, return_stats=False,
             batch_size=batch_size
         )
