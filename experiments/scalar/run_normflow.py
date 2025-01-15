@@ -109,11 +109,10 @@ logger.info('[INFO] Controller is of type ' + args.cont_type + ' and has %i para
 Q = 5*torch.eye(sys.state_dim).to(device)
 R = 0.003*torch.eye(sys.in_dim).to(device)
 # optimal loss bound
-loss_bound = 1
 sat_bound = torch.matmul(torch.matmul(torch.transpose(sys.x_init, 0, 1), Q), sys.x_init)
-if loss_bound is not None:
-    logger.info('[INFO] bounding the loss to ' + str(loss_bound))
-bounded_loss_fn = LQLossFH(Q, R, loss_bound, sat_bound)
+if args.loss_bound is not None:
+    logger.info('[INFO] bounding the loss to ' + str(args.loss_bound))
+bounded_loss_fn = LQLossFH(Q, R, args.loss_bound, sat_bound)
 original_loss_fn = LQLossFH(Q, R, None, None)
 
 # ------------ 5. Prior ------------

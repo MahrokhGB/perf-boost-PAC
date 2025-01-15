@@ -26,6 +26,9 @@ def argument_parser():
     parser.add_argument('--dim-internal', type=int, default=8, help='Dimension of the internal state of the controller. Adjusts the size of the linear part of REN. Default is 8.')
     parser.add_argument('--dim-nl', type=int, default=8, help='size of the non-linear part of REN. Default is 8.')
 
+    # loss
+    parser.add_argument('--loss-bound', type=float, default=1.0, help='Bound the loss to this value. Default is 1.')
+
     # optimizer
     parser.add_argument('--batch-size', type=int, default=8, help='Number of forward trajectories of the closed-loop system at each step. Default is 8.')
     parser.add_argument('--epochs', type=int, default=20000, help='Total number of epochs for training. Default is 20000.')

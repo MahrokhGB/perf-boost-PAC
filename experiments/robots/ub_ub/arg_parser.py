@@ -33,6 +33,7 @@ def argument_parser():
     parser.add_argument('--alpha-col', type=float, default=100 , help='Weight of the collision avoidance loss. Default is 100 if "col-av" is True, else None.')
     parser.add_argument('--alpha-obst', type=float, default=5e3 , help='Weight of the obstacle avoidance loss. Default is 5e3 if "obst-av" is True, else None.')
     parser.add_argument('--min-dist', type=float, default=1.0 , help='TODO. Default is 1.0 if "col-av" is True, else None.') #TODO: add help
+    parser.add_argument('--loss-bound', type=float, default=1.0, help='Bound the loss to this value. Default is 1.')
 
     # optimizer
     parser.add_argument('--batch-size', type=int, default=5, help='Number of forward trajectories of the closed-loop system at each step. Default is 5.')

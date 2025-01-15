@@ -92,7 +92,6 @@ logger.info('[INFO] Controller is of type ' + args.cont_type + ' and has %i para
 
 # ------------ 4. Loss ------------
 Q = torch.kron(torch.eye(args.n_agents), torch.eye(4)).to(device)   # TODO: move to args and print info
-loss_bound = 1
 x0 = dataset.x0.reshape(1, -1).to(device)
 sat_bound = torch.matmul(torch.matmul(x0, Q), x0.t())
 sat_bound += 0 if args.alpha_col is None else args.alpha_col
@@ -101,7 +100,7 @@ sat_bound = sat_bound/20
 logger.info('Loss saturates at: '+str(sat_bound))
 bounded_loss_fn = RobotsLossMultiBatch(
     Q=Q, alpha_u=args.alpha_u, xbar=dataset.xbar,
-    loss_bound=loss_bound, sat_bound=sat_bound.to(device),
+    loss_bound=args.loss_bound, sat_bound=sat_bound.to(device),
     alpha_col=args.alpha_col, alpha_obst=args.alpha_obst,
     min_dist=args.min_dist if args.col_av else None,
     n_agents=sys.n_agents,
