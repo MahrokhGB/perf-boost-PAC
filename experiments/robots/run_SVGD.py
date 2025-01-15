@@ -28,7 +28,7 @@ msg = print_args(args)
 # ----- SET UP LOGGER -----
 now = datetime.now().strftime("%m_%d_%H_%M_%S")
 save_path = os.path.join(BASE_DIR, 'experiments', 'robots', 'saved_results')
-save_folder = os.path.join(save_path, args.cont_type+'_'+now)
+save_folder = os.path.join(save_path, 'SVGD', args.cont_type+'_'+now)
 os.makedirs(save_folder)
 logging.basicConfig(filename=os.path.join(save_folder, 'log'), format='%(asctime)s %(message)s', filemode='w')
 logger = logging.getLogger('ren_controller_')
@@ -161,7 +161,7 @@ svgd_cont = SVGDCont(
     optimizer='Adam', lr=args.lr, lr_decay=None, #TODO: add decay
     initial_particles=initial_particles, kernel='RBF', bandwidth=None,
 )
-msg = '\n[INFO] SVGD: delta: %.2f' % args.delta + ' -- num particles: %2.f' % args.num_particles
+logger.info('\n[INFO] SVGD: delta: %.2f' % args.delta + ' -- num particles: %2.f' % args.num_particles)
 
 
 # ****** TRAIN SVGD ******

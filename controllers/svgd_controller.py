@@ -151,15 +151,6 @@ class SVGDCont():
         if early_stopping:
             valid_imp_queue = [100]*n_logs_no_change   # don't stop at the beginning
 
-        # initial evaluation on train data
-        message = 'Iter %d/%d' % (0, epochs)
-        if valid_data is not None:
-            # initial evaluation on validation data
-            message += ', Valid Loss: {:2.4f}'.format(
-                self.eval_rollouts(valid_data)
-            )
-        self.logger.info(message)
-
         last_params = self.particles.detach().clone()  # params in the last iteration
 
         t = time.time()
@@ -211,8 +202,8 @@ class SVGDCont():
                         print('valid_imp_queue', valid_imp_queue)
                         # check if there is no improvement
                         if all([valid_imp_queue[i] <tol_percentage for i in range(n_logs_no_change)]):
-                            msg += ' ---||--- early stopping at epoch %i' % (epoch)
-                            self.logger.info(msg)
+                            message += ' ---||--- early stopping at epoch %i' % (epoch)
+                            self.logger.info(message)
                             break
 
                 # log info

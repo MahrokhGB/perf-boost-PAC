@@ -135,7 +135,7 @@ else:
     if args.data_dep_prior:
         if args.dim_nl==8 and args.dim_internal==8:
             if args.num_rollouts_prior==5:
-                filename_load = os.path.join(save_path, 'empirical', 'PerfBoost_11_10_15_46_03', 'trained_controller.pt')
+                filename_load = os.path.join(save_path, 'empirical', 'pretrained', 'trained_controller.pt')
                 res_dict_loaded = torch.load(filename_load)
     prior_dict = {'type':'Gaussian'}
     training_param_names = ['X', 'Y', 'B2', 'C2', 'D21', 'D22', 'D12']
@@ -227,7 +227,7 @@ elif args.base_center_emp:
         # empirical controller avoids collisions
         # filename_load = os.path.join(save_path, 'empirical', 'PerfBoost_10_10_09_56_16', 'trained_controller.pt')
         # empirical controller does not avoid collisions
-        filename_load = os.path.join(save_path, 'empirical', 'PerfBoost_10_11_10_41_10', 'trained_controller.pt')
+        filename_load = os.path.join(save_path, 'empirical', 'pretrained', 'trained_controller.pt')
     res_dict_loaded = torch.load(filename_load)
     mean = np.array([])
     for name in training_param_names:
