@@ -5,7 +5,6 @@ from torch.utils.data import DataLoader
 import normflows as nf
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-print(BASE_DIR)
 sys.path.insert(1, BASE_DIR)
 
 from config import device
@@ -24,7 +23,7 @@ from inference_algs.normflow_assist import GibbsWrapperNF
 TRAIN_METHOD = 'normflow'
 
 U_SCALE = 0.1
-STD_SCALE = 1 #0.1 TODO
+STD_SCALE = 0.1 #TODO
 
 # ----- parse and set experiment arguments -----
 args = argument_parser()
@@ -105,7 +104,7 @@ sat_bound = torch.matmul(torch.matmul(x0, Q), x0.t())
 sat_bound += 0 if args.alpha_col is None else args.alpha_col
 sat_bound += 0 if args.alpha_obst is None else args.alpha_obst
 sat_bound = sat_bound/20
-logger.info('Loss saturates at: '+str(sat_bound))
+logger.info('Loss saturates at: '+str(sat_bound)+'\n')
 bounded_loss_fn = RobotsLossMultiBatch(
     Q=Q, alpha_u=args.alpha_u, xbar=dataset.xbar,
     loss_bound=args.loss_bound, sat_bound=sat_bound.to(device),
@@ -136,26 +135,39 @@ else:
             if args.num_rollouts_prior==5:
                 filename_load = os.path.join(save_path, 'empirical', 'pretrained', 'trained_controller.pt')
                 res_dict_loaded = torch.load(filename_load)
+    if args.nominal_prior:
+        res_dict_loaded = []
+        if args.dim_nl==8 and args.dim_internal==8:
+            for _, dirs, _ in os.walk(os.path.join(save_path, 'nominal')):
+                for dir in dirs:
+                    filename_load = os.path.join(save_path, 'nominal', dir, 'trained_controller.pt')
+                    res_dict_loaded.append(torch.load(filename_load))
     prior_dict = {'type':'Gaussian'}
     training_param_names = ['X', 'Y', 'B2', 'C2', 'D21', 'D22', 'D12']
     for name in training_param_names:
         if args.data_dep_prior:
             prior_dict[name+'_loc'] = res_dict_loaded[name]
+            prior_dict[name+'_scale'] = args.prior_std
+        elif args.nominal_prior:
+            vals = torch.stack([res[name] for res in res_dict_loaded], dim=0)
+            # val and std computed elementwise. same shape as the training param
+            prior_dict[name+'_loc'] = vals.mean(dim=0)  
+            prior_dict[name+'_scale'] = vals.std(dim=0, correction=1) # sample std
         else:
             prior_dict[name+'_loc'] = 0
-        prior_dict[name+'_scale'] = args.prior_std
-        print(prior_dict[name+'_scale'])
+            prior_dict[name+'_scale'] = args.prior_std
 
 # ------------ 6. Posterior ------------
 # use max lambda s.t. eps/lambda <= thresh
 thresh_eps_lambda = 0.2
 num_prior_samples = 10**6
-lambda_max_eps = get_max_lambda(thresh=thresh_eps_lambda, delta=args.delta, n_p=num_prior_samples, init_condition=20, loss_bound=loss_bound)    #TODO
+lambda_max_eps = 1000
+# lambda_max_eps = get_max_lambda(thresh=thresh_eps_lambda, delta=args.delta, n_p=num_prior_samples, init_condition=20, loss_bound=args.loss_bound)    #TODO
 logger.info('lambda_max_eps = '+str(lambda_max_eps))
 # define target distribution
 gibbs_posteior = GibbsPosterior(
     loss_fn=bounded_loss_fn,
-    lambda_=lambda_max_eps, # args.gibbs_lambda, # TODO
+    lambda_=lambda_max_eps, # args.gibbs_lambda, # # TODO
     prior_dict=prior_dict,
     # attributes of the CL system
     controller=ctl_generic, sys=sys,
@@ -169,20 +181,18 @@ target = GibbsWrapperNF(
     prop_scale=torch.tensor(6.0), prop_shift=torch.tensor(-3.0)
 )
 tmp = gibbs_posteior.prior.sample(torch.Size([100,]))
-print(tmp.mean(dim=0)[0:10])
-print(tmp.std(dim=0)[0:10])
 
 # ------------ 7. save setup ------------
 setup_dict = vars(args)
 setup_dict['sat_bound'] = sat_bound
-setup_dict['loss_bound'] = loss_bound
+setup_dict['loss_bound'] = args.loss_bound
 setup_dict['prior_dict'] = prior_dict
 setup_dict['gibbs_lambda'] = gibbs_posteior.lambda_
 torch.save(setup_dict, os.path.join(save_folder, 'setup'))
 
 # ------------ 8. NormFlows ------------
 num_samples_nf_train = 100
-num_samples_nf_eval = 100 # TODO
+num_samples_nf_eval = num_samples_nf_train 
 
 flows = []
 for i in range(args.num_flows):
@@ -216,23 +226,31 @@ if args.base_is_prior:
     state_dict['loc'] = gibbs_posteior.prior.mean().reshape(1, -1)
     state_dict['log_scale'] = torch.log(gibbs_posteior.prior.stddev().reshape(1, -1))
     q0.load_state_dict(state_dict)
-# base distribution same as the prior
-elif args.base_center_emp:
-    if args.dim_nl==1 and args.dim_internal==1:
-        filename_load = os.path.join(save_path, 'empirical', 'PerfBoost_08_29_14_58_13', 'trained_controller.pt')
-    elif args.dim_nl==2 and args.dim_internal==4:
-        filename_load = os.path.join(save_path, 'empirical', 'PerfBoost_08_29_14_57_38', 'trained_controller.pt')
-    elif args.dim_nl==8 and args.dim_internal==8:
-        # empirical controller avoids collisions
-        # filename_load = os.path.join(save_path, 'empirical', 'PerfBoost_10_10_09_56_16', 'trained_controller.pt')
-        # empirical controller does not avoid collisions
-        filename_load = os.path.join(save_path, 'empirical', 'pretrained', 'trained_controller.pt')
+# base distribution centered at the empirical or nominal controller
+elif args.base_center_emp or args.base_center_nominal:
+    # get filename to load
+    if args.base_center_emp:
+        if args.dim_nl==1 and args.dim_internal==1:
+            filename_load = os.path.join(save_path, 'empirical', 'PerfBoost_08_29_14_58_13', 'trained_controller.pt')
+        elif args.dim_nl==2 and args.dim_internal==4:
+            filename_load = os.path.join(save_path, 'empirical', 'PerfBoost_08_29_14_57_38', 'trained_controller.pt')
+        elif args.dim_nl==8 and args.dim_internal==8:
+            # # empirical controller avoids collisions
+            # filename_load = os.path.join(save_path, 'empirical', 'PerfBoost_01_14_16_26_11', 'trained_controller.pt')
+            # empirical controller does not avoid collisions
+            filename_load = os.path.join(save_path, 'empirical', 'PerfBoost_01_19_11_31_25', 'trained_controller.pt')
+    if args.base_center_nominal:
+        if args.dim_nl==8 and args.dim_internal==8:
+            filename_load = os.path.join(save_path, 'nominal', 'PerfBoost_01_22_15_25_52', 'trained_controller.pt')
+    # load the controller
     res_dict_loaded = torch.load(filename_load)
+    # set the mean of the base distribution to the controller
     mean = np.array([])
     for name in training_param_names:
         mean = np.append(mean, res_dict_loaded[name].cpu().detach().numpy().flatten())
     state_dict = q0.state_dict()
     state_dict['loc'] = torch.Tensor(mean.reshape(1, -1))
+    # set the scale of the base distribution
     # state_dict['log_scale'] = state_dict['log_scale'] - 100 # TODO
     state_dict['log_scale'] = torch.log(torch.abs(state_dict['loc'])*STD_SCALE) # TODO
     q0.load_state_dict(state_dict)
@@ -247,8 +265,10 @@ nfm.to(device)  # Move model on GPU if available
 # ------------ 10. Train NormFlows ------------
 optimizer = torch.optim.Adam(nfm.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 train_norm_flow(
-    nfm=nfm, sys=sys, ctl_generic=ctl_generic, logger=logger, bounded_loss_fn=bounded_loss_fn,
-    save_folder=save_folder, train_data=train_data, test_data=test_data, plot_data=plot_data,
+    nfm=nfm, sys=sys, ctl_generic=ctl_generic, logger=logger, loss_fn=original_loss_fn,
+    save_folder=save_folder, train_data_full=train_data, test_data=test_data, plot_data=plot_data,
+    return_best=args.return_best, validation_frac=args.validation_frac,
+    early_stopping=args.early_stopping, n_logs_no_change=args.n_logs_no_change, tol_percentage=args.tol_percentage,
     optimizer=optimizer, epochs=args.epochs, log_epoch=args.log_epoch, annealing=args.annealing,
     anneal_iter=args.anneal_iter, num_samples_nf_train=num_samples_nf_train, num_samples_nf_eval=num_samples_nf_eval,
 )

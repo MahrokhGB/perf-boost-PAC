@@ -148,7 +148,6 @@ gibbs_posterior = GibbsPosterior(
 
 
 # ****** INIT SVGD ******
-return_best = True
 # initialize trainable params
 dim = (args.num_particles, ctl_generic.num_params)
 
@@ -169,7 +168,7 @@ logger.info('------------ Begin training ------------')
 svgd_cont.fit(
     train_dataloader=train_dataloader, 
     early_stopping=args.early_stopping, tol_percentage=args.tol_percentage, n_logs_no_change=args.n_logs_no_change,
-    return_best=return_best, log_period=args.log_epoch, epochs=args.epochs,
+    return_best=args.return_best, log_period=args.log_epoch, epochs=args.epochs,
     valid_data=valid_data
 )
 logger.info('Training completed.')

@@ -1,6 +1,5 @@
-import torch, sys, os, math, copy
+import torch, sys, os
 from collections import OrderedDict
-from torch.func import stack_module_state, functional_call
 from pyro.distributions import Normal, Uniform
 from torch.distributions import Distribution
 from collections.abc import Iterable
@@ -11,7 +10,7 @@ sys.path.insert(1, BASE_DIR)
 from config import device
 from loss_functions import *
 from plants import CLSystem
-from controllers import NNController, AffineController, PerfBoostController
+from controllers import NNController
 from utils.assistive_functions import to_tensor, WrapLogger
 
 class GibbsPosterior():
@@ -118,15 +117,20 @@ class GibbsPosterior():
                 if prior_dict['type'] == 'Gaussian':
                     if not (name+'_loc' in prior_dict.keys() or name+'_scale' in prior_dict.keys()):
                         self.logger.info('[WARNING]: prior for ' + name + ' was not provided. Replaced by default.')
-                    loc_val = prior_dict.get(name+'_loc', 0)
+                    # prepare loc
+                    loc_val = prior_dict.get(name+'_loc', 0)    # default value is 0
                     if isinstance(loc_val, Iterable):
                         loc_val = loc_val.flatten().to(device)
                     else:
                         loc_val = loc_val*torch.ones(nelement, device=device)
-                    dist = Normal(
-                        loc=loc_val,
-                        scale=prior_dict.get(name+'_scale', 1)*torch.ones(nelement, device=device)
-                    )
+                    # prepare scale
+                    scale_val = prior_dict.get(name+'_scale', 1)    # default value is 1
+                    if isinstance(scale_val, Iterable):
+                        scale_val = scale_val.flatten().to(device)
+                    else:
+                        scale_val = scale_val*torch.ones(nelement, device=device)
+                    # define distribution
+                    dist = Normal(loc=loc_val, scale=scale_val)
                 # Uniform prior
                 elif prior_dict['type'] == 'Uniform':
                     raise NotImplementedError

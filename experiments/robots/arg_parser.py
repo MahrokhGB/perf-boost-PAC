@@ -14,7 +14,8 @@ def argument_parser():
     parser.add_argument('--n-agents', type=int, default=2, help='Number of agents. Default is 2.')
     parser.add_argument('--num-rollouts', type=int, default=30, help='Number of rollouts in the training data. Default is 30.')
     parser.add_argument('--std-init-plant', type=float, default=0.2, help='std of the plant initial conditions. Default is 0.2.')
-
+    parser.add_argument('--nominal-exp', type=str2bool, default=False, help='Train data is noise-free nominal initial state. Default is False')
+    
     # plant
     parser.add_argument('--spring-const', type=float, default=1.0 , help='Spring constant. Default is 1.0.')
     parser.add_argument('--linearize-plant', type=str2bool, default=False, help='Linearize plant or not. Default is False.')
@@ -33,7 +34,8 @@ def argument_parser():
     parser.add_argument('--alpha-col', type=float, default=100 , help='Weight of the collision avoidance loss. Default is 100 if "col-av" is True, else None.')
     parser.add_argument('--alpha-obst', type=float, default=5e3 , help='Weight of the obstacle avoidance loss. Default is 5e3 if "obst-av" is True, else None.')
     parser.add_argument('--min-dist', type=float, default=1.0 , help='TODO. Default is 1.0 if "col-av" is True, else None.') #TODO: add help
-
+    parser.add_argument('--loss-bound', type=float, default=1.0, help='Bound the loss to this value. Default is 1.')
+    
     # optimizer
     parser.add_argument('--batch-size', type=int, default=5, help='Number of forward trajectories of the closed-loop system at each step. Default is 5.')
     parser.add_argument('--epochs', type=int, default=-1, help='Total number of epochs for training. Default is 5000 if collision avoidance, else 100.')
@@ -46,7 +48,6 @@ def argument_parser():
     parser.add_argument('--validation-frac', type=float, default=0.25, help='Fraction of data used for validation. Default is 0.25.')
     parser.add_argument('--n-logs-no-change', type=int, default=5, help='Early stopping if the validation loss does not improve by at least tol percentage during the last n_logs_no_change logged epochs. Default is 5.')
     parser.add_argument('--tol-percentage', type=float, default=0.05, help='Early stopping if the validation loss does not improve by at least tol percentage during the last n_logs_no_change logged epochs. Default is 0.05%.')
-    
     
     # inference
     parser.add_argument('--prior-std', type=float, default=7, help='Gaussian prior std. Default is 7.')
@@ -65,7 +66,8 @@ def argument_parser():
     parser.add_argument('--delta', type=float, default=0.1 , help='Delta for Gibbs distribution. PAC bounds hold with prob >= 1- delta. Default is 0.1.')
     parser.add_argument('--gibbs-lambda', type=float, default=None , help='Lambda is the tempretaure of the Gibbs distribution. Default is lambda_star (see the paper).')
     # inference - data-dependent prior
-    parser.add_argument('--data-dep-prior', type=str2bool, default=False, help='LEarn the prior from a subset of data. Default is False.')
+    parser.add_argument('--nominal-prior', type=str2bool, default=False, help='Center the prior at a controller learned from nominal noise-free initial conditions. Default is False.')
+    parser.add_argument('--data-dep-prior', type=str2bool, default=False, help='Learn the prior from a subset of data. Default is False.')
     parser.add_argument('--num-rollouts-prior', type=int, default=0, help='Number of rollouts used for training the prior.')
 
 
@@ -120,6 +122,14 @@ def argument_parser():
         assert args.validation_frac > 0, 'validation fraction must be positive for early stopping.'
         assert args.validation_frac < 1, 'validation fraction must be less than 1 for early stopping.'
 
+    if args.nominal_exp:
+        if args.num_rollouts>1:
+            print('Warning: nominal_exp is set to True, but num_rollouts>1. Only one rollout is used for training.')
+            args.num_rollouts = 1
+        if args.batch_size>1:
+            print('Warning: nominal_exp is set to True, but batch_size>1. Only one rollout is used for training.')
+            args.batch_size = 1
+
 
     return args
 
@@ -150,9 +160,14 @@ def print_args(args, method='empirical'):
     else:
         msg += '\n Early stopping disabled'
 
-    msg += '\n[INFO] Prior: prior std: %.2e' % args.prior_std
-    msg += (' -- learned from data using %i rollouts' % args.num_rollouts_prior) if args.data_dep_prior else ' -- data independent'
-
+    msg += '\n[INFO] Prior: prior mean: '
+    if args.data_dep_prior:
+        msg += 'learned from data using %i rollouts' % args.num_rollouts_prior 
+    elif args.nominal_prior: 
+        msg += 'centered at the nominal controller'
+    else:
+        msg += 'data independent'
+    msg +=  '-- prior std: %.2e' % args.prior_std
     msg += '\n[INFO] Gibbs: delta: %.2e' % args.delta + ' -- gibbs_lambda: %.2f' % args.gibbs_lambda
 
     # arguments for normflow:
