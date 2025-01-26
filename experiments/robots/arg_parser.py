@@ -162,12 +162,12 @@ def print_args(args, method='empirical'):
 
     msg += '\n[INFO] Prior: prior mean: '
     if args.data_dep_prior:
-        msg += 'learned from data using %i rollouts' % args.num_rollouts_prior 
+        msg += 'learned from data using %i rollouts' % args.num_rollouts_prior    
+        msg +=  '-- prior std: %.2e' % args.prior_std 
     elif args.nominal_prior: 
-        msg += 'centered at the nominal controller'
+        msg += 'based on nominal controllers trained from noise-free initial conditions with different random seeds'
     else:
-        msg += 'data independent'
-    msg +=  '-- prior std: %.2e' % args.prior_std
+        msg += 'centered at zero -- prior std: %.2e' % args.prior_std
     msg += '\n[INFO] Gibbs: delta: %.2e' % args.delta + ' -- gibbs_lambda: %.2f' % args.gibbs_lambda
 
     # arguments for normflow:

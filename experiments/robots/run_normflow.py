@@ -142,6 +142,7 @@ else:
                 for dir in dirs:
                     filename_load = os.path.join(save_path, 'nominal', dir, 'trained_controller.pt')
                     res_dict_loaded.append(torch.load(filename_load))
+        logger.info('[INFO] Loaded '+str(len(res_dict_loaded))+' nominal controllers.')
     prior_dict = {'type':'Gaussian'}
     training_param_names = ['X', 'Y', 'B2', 'C2', 'D21', 'D22', 'D12']
     for name in training_param_names:
@@ -149,10 +150,12 @@ else:
             prior_dict[name+'_loc'] = res_dict_loaded[name]
             prior_dict[name+'_scale'] = args.prior_std
         elif args.nominal_prior:
+            PRIOR_STDP_SCALE = 20 # TODO
+            logger.info('[INFO] Prior distribution is the distribution over nominal controllers, with std scaled by %.4f.' % PRIOR_STDP_SCALE)
             vals = torch.stack([res[name] for res in res_dict_loaded], dim=0)
             # val and std computed elementwise. same shape as the training param
             prior_dict[name+'_loc'] = vals.mean(dim=0)  
-            prior_dict[name+'_scale'] = vals.std(dim=0, correction=1) # sample std
+            prior_dict[name+'_scale'] = vals.std(dim=0, correction=1) * PRIOR_STDP_SCALE
         else:
             prior_dict[name+'_loc'] = 0
             prior_dict[name+'_scale'] = args.prior_std
@@ -161,8 +164,8 @@ else:
 # use max lambda s.t. eps/lambda <= thresh
 thresh_eps_lambda = 0.2
 num_prior_samples = 10**6
-lambda_max_eps = 1000
-# lambda_max_eps = get_max_lambda(thresh=thresh_eps_lambda, delta=args.delta, n_p=num_prior_samples, init_condition=20, loss_bound=args.loss_bound)    #TODO
+# lambda_max_eps = 1000
+lambda_max_eps = get_max_lambda(thresh=thresh_eps_lambda, delta=args.delta, n_p=num_prior_samples, init_condition=20, loss_bound=args.loss_bound)    #TODO
 logger.info('lambda_max_eps = '+str(lambda_max_eps))
 # define target distribution
 gibbs_posteior = GibbsPosterior(
@@ -222,9 +225,11 @@ for i in range(args.num_flows):
 q0 = nf.distributions.DiagGaussian(num_params, trainable=args.learn_base)
 # base distribution same as the prior
 if args.base_is_prior:
+    BASE_STDP_SCALE = 1/PRIOR_STDP_SCALE/100 # TODO
+    logger.info('[INFO] Base distribution is similar to the prior, with std scaled by %.4f.' % BASE_STDP_SCALE)
     state_dict = q0.state_dict()
     state_dict['loc'] = gibbs_posteior.prior.mean().reshape(1, -1)
-    state_dict['log_scale'] = torch.log(gibbs_posteior.prior.stddev().reshape(1, -1))
+    state_dict['log_scale'] = torch.log(gibbs_posteior.prior.stddev().reshape(1, -1)*BASE_STDP_SCALE) 
     q0.load_state_dict(state_dict)
 # base distribution centered at the empirical or nominal controller
 elif args.base_center_emp or args.base_center_nominal:

@@ -87,7 +87,9 @@ def train_norm_flow(
     # ------------ Train NormFlows ------------
     nf_loss_hist = [None]*(1+epochs)
     t = time.time()
-    for epoch in range(1+epochs):
+    epoch = 0
+    stopped = False
+    while not stopped:
         optimizer.zero_grad()
         # loss 
         if annealing:
@@ -110,8 +112,6 @@ def train_norm_flow(
                 )
                 # evaluate mean of sampled controllers on train data
                 z_mean = torch.mean(z, axis=0).reshape(1, -1)
-                # print('mean ', z_mean[0,0:10])
-                # print('std ', torch.std(z, axis=0)[0:10])
                 loss_z_mean_train, _ = eval_norm_flow(
                     sys=sys, ctl_generic=ctl_generic, data=train_data,
                     loss_fn=loss_fn, count_collisions=False, return_traj=True, params=z_mean
@@ -127,13 +127,13 @@ def train_norm_flow(
                         sys=sys, ctl_generic=ctl_generic, data=valid_data,
                         loss_fn=loss_fn, count_collisions=False, return_traj=True, params=z_mean
                     )
-
             # log nf loss 
             msg = 'Epoch: %i --- NF loss: %.2f'% (epoch, nf_loss_hist[epoch])
             msg += ' ---||--- elapsed time: %.0f s' % (time.time() - t)
             msg += ' --- train loss %f' % loss_z_train + ' --- train loss of mean %f' % loss_z_mean_train
             if not valid_data is None:
                 msg += ' --- valid loss %f' % loss_z_valid + ' --- valid loss of mean %f' % loss_z_mean_valid
+            
             # compare with the best valid loss
             imp = 100 * (best_loss-loss_z_valid)/best_loss
             # update best model
@@ -141,6 +141,7 @@ def train_norm_flow(
                 best_loss = loss_z_valid
                 best_model_dict = copy.deepcopy(nfm.state_dict())
                 msg += ' --- best model updated'
+            
             # early stopping
             if early_stopping:
                 # add the current valid loss to the queue
@@ -150,21 +151,17 @@ def train_norm_flow(
                 if all([valid_imp_queue[i] <tol_percentage for i in range(n_logs_no_change)]):
                     msg += ' ---||--- early stopping at epoch %i' % (epoch)
                     logger.info(msg)
-                    break
+                    stopped = True
+            
             logger.info(msg)
 
-            # save nf model
-            name = 'final' if epoch+1==epochs else 'itr '+str(epoch+1)
-            if name == 'final':
-                if return_best:
-                    nfm.load_state_dict(best_model_dict)
-                torch.save(nfm.state_dict(), os.path.join(save_folder, name+'_nfm'))
             # plot loss
             plt.figure(figsize=(10, 10))
             plt.plot(nf_loss_hist, label='loss')
             plt.legend()
             plt.savefig(os.path.join(save_folder, 'loss.pdf'))
             plt.show()
+            
             # plot closed_loop
             _, xs_z_plot = eval_norm_flow(
                 sys=sys, ctl_generic=ctl_generic, data=plot_data,
@@ -176,13 +173,23 @@ def train_norm_flow(
             )
             plot_trajectories(
                 torch.cat((xs_z_plot[:, :5, :, :].squeeze(0), xs_z_mean_plot), 0),
-                sys.xbar, sys.n_agents, text="CL - "+name, T=t_ext,
-                save_folder=save_folder, filename='CL_'+name+'.pdf',
+                sys.xbar, sys.n_agents, text='CL - itr '+str(epoch), T=t_ext,
+                save_folder=save_folder, filename='CL_itr '+str(epoch+1)+'.pdf',
                 obstacle_centers=loss_fn.obstacle_centers,
                 obstacle_covs=loss_fn.obstacle_covs,
                 plot_collisions=True, min_dist=loss_fn.min_dist
             )
 
+        # next epoch
+        epoch += 1
+        if epoch == epochs+1:
+            stopped = True
+
+    # save nf model
+    if return_best:
+        nfm.load_state_dict(best_model_dict)
+    torch.save(nfm.state_dict(), os.path.join(save_folder, 'trained_nfm'))
+        
     # ------ Evaluate the trained model ------
     # evaluate on the train data
     logger.info('\n[INFO] evaluating the trained flow on the entire %i training rollouts.' % train_data_full.shape[0])
