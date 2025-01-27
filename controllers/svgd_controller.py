@@ -1,4 +1,6 @@
-import torch, time
+import torch, time, os
+import matplotlib.pyplot as plt
+
 from inference_algs.svgd import SVGD, RBF_Kernel, IMQSteinKernel
 
 
@@ -118,7 +120,7 @@ class SVGDCont():
     # ---------- FIT ----------
     def fit(self, train_dataloader, epochs, 
             early_stopping, tol_percentage=None, n_logs_no_change=None,
-            return_best=True, valid_data=None, log_period=500):
+            return_best=True, valid_data=None, log_period=500, loss_fn=None, save_folder=None):
         """
         fits the hyper-posterior particles with SVGD
 
@@ -154,6 +156,7 @@ class SVGDCont():
         last_params = self.particles.detach().clone()  # params in the last iteration
 
         t = time.time()
+        svgd_loss_hist = [None]*epochs
         for epoch in range(1+epochs):
             # iterate over all data batches
             for train_data_batch in train_dataloader:
@@ -166,6 +169,7 @@ class SVGDCont():
                     self.unknown_err = True
             
             last_params = self.particles.detach().clone()
+            svgd_loss_hist[epoch]= self.svgd.log_prob_particles.item() #to('cpu').data.numpy()
 
             # --- print stats ---
             if (epoch % log_period == 0) and (not self.unknown_err):
@@ -180,7 +184,7 @@ class SVGDCont():
                 if valid_data is not None:
                     # evaluate on validation set
                     try:
-                        valid_res = self.eval_rollouts(valid_data)
+                        valid_res = self.eval_rollouts(valid_data, loss_fn=loss_fn)
                         message +=  ', Valid Loss: {:2.4f}'.format(valid_res)
                     except Exception as e:
                         message += '[Unhandled ERR] in eval valid rollouts:'
@@ -199,7 +203,6 @@ class SVGDCont():
                         # add the current valid loss to the queue
                         valid_imp_queue.pop(0)
                         valid_imp_queue.append(imp)
-                        print('valid_imp_queue', valid_imp_queue)
                         # check if there is no improvement
                         if all([valid_imp_queue[i] <tol_percentage for i in range(n_logs_no_change)]):
                             message += ' ---||--- early stopping at epoch %i' % (epoch)
@@ -208,6 +211,14 @@ class SVGDCont():
 
                 # log info
                 self.logger.info(message)
+
+                # plot loss
+                if not save_folder is None:
+                    plt.figure(figsize=(10, 10))
+                    plt.plot(svgd_loss_hist[:epoch+1], label='loss')
+                    plt.legend()
+                    plt.savefig(os.path.join(save_folder, 'loss.pdf'))
+                    plt.show()
 
 
             # go one iter back if non-psd

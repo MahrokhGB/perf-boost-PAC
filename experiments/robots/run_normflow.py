@@ -150,7 +150,7 @@ else:
             prior_dict[name+'_loc'] = res_dict_loaded[name]
             prior_dict[name+'_scale'] = args.prior_std
         elif args.nominal_prior:
-            PRIOR_STDP_SCALE = 20 # TODO
+            PRIOR_STDP_SCALE = 50 # TODO
             logger.info('[INFO] Prior distribution is the distribution over nominal controllers, with std scaled by %.4f.' % PRIOR_STDP_SCALE)
             vals = torch.stack([res[name] for res in res_dict_loaded], dim=0)
             # val and std computed elementwise. same shape as the training param
@@ -165,12 +165,12 @@ else:
 thresh_eps_lambda = 0.2
 num_prior_samples = 10**6
 # lambda_max_eps = 1000
-lambda_max_eps = get_max_lambda(thresh=thresh_eps_lambda, delta=args.delta, n_p=num_prior_samples, init_condition=20, loss_bound=args.loss_bound)    #TODO
-logger.info('lambda_max_eps = '+str(lambda_max_eps))
+# lambda_max_eps = get_max_lambda(thresh=thresh_eps_lambda, delta=args.delta, n_p=num_prior_samples, init_condition=20, loss_bound=args.loss_bound)    #TODO
+# logger.info('lambda_max_eps = '+str(lambda_max_eps))
 # define target distribution
 gibbs_posteior = GibbsPosterior(
     loss_fn=bounded_loss_fn,
-    lambda_=lambda_max_eps, # args.gibbs_lambda, # # TODO
+    lambda_=args.gibbs_lambda, # lambda_max_eps,  # # TODO
     prior_dict=prior_dict,
     # attributes of the CL system
     controller=ctl_generic, sys=sys,

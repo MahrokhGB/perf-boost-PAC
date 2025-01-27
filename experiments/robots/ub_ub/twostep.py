@@ -1,4 +1,4 @@
-import sys, os, logging, torch, math, copy
+import sys, os, logging, torch, math
 from datetime import datetime
 from torch.utils.data import DataLoader
 import normflows as nf
@@ -18,7 +18,6 @@ from inference_algs.normflow_assist.mynf import NormalizingFlow
 from inference_algs.normflow_assist import GibbsWrapperNF
 from ub_utils import get_mcdim_ub
 from inference_algs.normflow_assist import train_norm_flow
-
 
 num_prior_samples = 10**6   # TODO: move to arg parser
 # usual setup
@@ -143,14 +142,39 @@ plt.savefig(os.path.join(
     save_folder, 'tuning_lambda_Q.png'))
 
 # ------------ 3. Train step 1 ------------
-# data-independent prior for step 1
+# prior for step 1
+if args.data_dep_prior:
+    if args.dim_nl==8 and args.dim_internal==8:
+        if args.num_rollouts_prior==5:
+            filename_load = os.path.join(save_path_rob, 'empirical', 'pretrained', 'trained_controller.pt')
+            res_dict_loaded = torch.load(filename_load)
+if args.nominal_prior:
+    res_dict_loaded = []
+    if args.dim_nl==8 and args.dim_internal==8:
+        for _, dirs, _ in os.walk(os.path.join(save_path_rob, 'nominal')):
+            for dir in dirs:
+                filename_load = os.path.join(save_path_rob, 'nominal', dir, 'trained_controller.pt')
+                res_dict_loaded.append(torch.load(filename_load))
+    logger.info('[INFO] Loaded '+str(len(res_dict_loaded))+' nominal controllers.')
 prior_dict = {'type':'Gaussian'}
 training_param_names = ['X', 'Y', 'B2', 'C2', 'D21', 'D22', 'D12']
 for name in training_param_names:
-    prior_dict[name+'_loc'] = 0
-    prior_dict[name+'_scale'] = args.prior_std
-mcdim_terms = []
+    if args.data_dep_prior:
+        prior_dict[name+'_loc'] = res_dict_loaded[name]
+        prior_dict[name+'_scale'] = args.prior_std
+    elif args.nominal_prior:
+        PRIOR_STDP_SCALE = 50 # TODO
+        logger.info('[INFO] Prior distribution is the distribution over nominal controllers, with std scaled by %.4f.' % PRIOR_STDP_SCALE)
+        vals = torch.stack([res[name] for res in res_dict_loaded], dim=0)
+        # val and std computed elementwise. same shape as the training param
+        prior_dict[name+'_loc'] = vals.mean(dim=0)  
+        prior_dict[name+'_scale'] = vals.std(dim=0, correction=1) * PRIOR_STDP_SCALE
+    else:
+        prior_dict[name+'_loc'] = 0
+        prior_dict[name+'_scale'] = args.prior_std
+
 # posteiror for step 1
+mcdim_terms = []
 for lambda_P, lambda_Q, S_P in zip(lambda_P_range, lambda_Q_range, num_rollouts_P_range):
     logger.info('\n\n------ Training prior using '+str(S_P)+' rollouts ------')
     ctl_generic.reset()
@@ -199,34 +223,44 @@ for lambda_P, lambda_Q, S_P in zip(lambda_P_range, lambda_Q_range, num_rollouts_
     q0 = nf.distributions.DiagGaussian(num_params, trainable=args.learn_base)
     # base distribution same as the prior
     if args.base_is_prior:
+        BASE_STDP_SCALE = 1/PRIOR_STDP_SCALE/100 # TODO
+        logger.info('[INFO] Base distribution is similar to the prior, with std scaled by %.4f.' % BASE_STDP_SCALE)
         state_dict = q0.state_dict()
         state_dict['loc'] = gibbs_posteior.prior.mean().reshape(1, -1)
-        state_dict['log_scale'] = torch.log(gibbs_posteior.prior.stddev().reshape(1, -1))
+        state_dict['log_scale'] = torch.log(gibbs_posteior.prior.stddev().reshape(1, -1)*BASE_STDP_SCALE) 
         q0.load_state_dict(state_dict)
-    # base distribution centered at the empirical controller
-    elif args.base_center_emp:
-        if args.dim_nl==1 and args.dim_internal==1:
-            filename_load = os.path.join(save_path_rob, 'empirical', 'PerfBoost_08_29_14_58_13', 'trained_controller.pt')
-        elif args.dim_nl==2 and args.dim_internal==4:
-            filename_load = os.path.join(save_path_rob, 'empirical', 'PerfBoost_08_29_14_57_38', 'trained_controller.pt')
-        elif args.dim_nl==8 and args.dim_internal==8:
-            # empirical controller avoids collisions
-            # filename_load = os.path.join(save_path_rob, 'empirical', 'PerfBoost_10_10_09_56_16', 'trained_controller.pt')
-            # empirical controller does not avoid collisions
-            filename_load = os.path.join(save_path_rob, 'empirical', 'PerfBoost_10_11_10_41_10', 'trained_controller.pt')
+    # base distribution centered at the empirical or nominal controller
+    elif args.base_center_emp or args.base_center_nominal:
+        # get filename to load
+        if args.base_center_emp:
+            if args.dim_nl==1 and args.dim_internal==1:
+                filename_load = os.path.join(save_path_rob, 'empirical', 'PerfBoost_08_29_14_58_13', 'trained_controller.pt')
+            elif args.dim_nl==2 and args.dim_internal==4:
+                filename_load = os.path.join(save_path_rob, 'empirical', 'PerfBoost_08_29_14_57_38', 'trained_controller.pt')
+            elif args.dim_nl==8 and args.dim_internal==8:
+                # # empirical controller avoids collisions
+                # filename_load = os.path.join(save_path_rob, 'empirical', 'PerfBoost_01_14_16_26_11', 'trained_controller.pt')
+                # empirical controller does not avoid collisions
+                filename_load = os.path.join(save_path_rob, 'empirical', 'PerfBoost_01_19_11_31_25', 'trained_controller.pt')
+        if args.base_center_nominal:
+            if args.dim_nl==8 and args.dim_internal==8:
+                filename_load = os.path.join(save_path_rob, 'nominal', 'PerfBoost_01_22_15_25_52', 'trained_controller.pt')
+        # load the controller
         res_dict_loaded = torch.load(filename_load)
+        # set the mean of the base distribution to the controller
         mean = np.array([])
         for name in training_param_names:
             mean = np.append(mean, res_dict_loaded[name].cpu().detach().numpy().flatten())
         state_dict = q0.state_dict()
         state_dict['loc'] = torch.Tensor(mean.reshape(1, -1))
+        # set the scale of the base distribution
         # state_dict['log_scale'] = state_dict['log_scale'] - 100 # TODO
         state_dict['log_scale'] = torch.log(torch.abs(state_dict['loc'])*STD_SCALE) # TODO
         q0.load_state_dict(state_dict)
-    # default base
     else:
         state_dict = q0.state_dict()
         state_dict['log_scale'] = torch.log(torch.abs(state_dict['loc'])*STD_SCALE) # TODO
+        q0.load_state_dict(state_dict)
 
     # set up normflow
     nfm = NormalizingFlow(q0=q0, flows=flows, p=target) # NOTE: set back to nf.NormalizingFlow
@@ -235,8 +269,10 @@ for lambda_P, lambda_Q, S_P in zip(lambda_P_range, lambda_Q_range, num_rollouts_
     # train nfm
     optimizer = torch.optim.Adam(nfm.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     train_norm_flow(
-        nfm=nfm, sys=sys, ctl_generic=ctl_generic, logger=logger, bounded_loss_fn=bounded_loss_fn,
-        save_folder=save_folder, train_data=train_data_P, test_data=test_data, plot_data=plot_data,
+        nfm=nfm, sys=sys, ctl_generic=ctl_generic, logger=logger, loss_fn=bounded_loss_fn,
+        save_folder=save_folder, train_data_full=train_data_P, test_data=test_data, plot_data=plot_data,
+        return_best=args.return_best, validation_frac=args.validation_frac,
+        early_stopping=args.early_stopping, n_logs_no_change=args.n_logs_no_change, tol_percentage=args.tol_percentage,
         optimizer=optimizer, epochs=args.epochs, log_epoch=args.log_epoch, annealing=args.annealing,
         anneal_iter=args.anneal_iter, num_samples_nf_train=num_samples_nf_train, num_samples_nf_eval=num_samples_nf_eval,
     )

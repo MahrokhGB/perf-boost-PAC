@@ -120,6 +120,7 @@ original_loss_fn = RobotsLossMultiBatch(
 
 # ------------ 5. Prior ------------
 if args.cont_type in ['Affine', 'NN']:
+    training_param_names = ['weight', 'bias']
     prior_dict = {
         'type':'Gaussian', 'type_w':'Gaussian',
         'type_b':'Gaussian_biased',
@@ -127,11 +128,35 @@ if args.cont_type in ['Affine', 'NN']:
         'bias_loc':0, 'bias_scale':5,
     }
 else:
+    if args.data_dep_prior:
+        if args.dim_nl==8 and args.dim_internal==8:
+            if args.num_rollouts_prior==5:
+                filename_load = os.path.join(save_path, 'empirical', 'pretrained', 'trained_controller.pt')
+                res_dict_loaded = torch.load(filename_load)
+    if args.nominal_prior:
+        res_dict_loaded = []
+        if args.dim_nl==8 and args.dim_internal==8:
+            for _, dirs, _ in os.walk(os.path.join(save_path, 'nominal')):
+                for dir in dirs:
+                    filename_load = os.path.join(save_path, 'nominal', dir, 'trained_controller.pt')
+                    res_dict_loaded.append(torch.load(filename_load))
+        logger.info('[INFO] Loaded '+str(len(res_dict_loaded))+' nominal controllers.')
     prior_dict = {'type':'Gaussian'}
     training_param_names = ['X', 'Y', 'B2', 'C2', 'D21', 'D22', 'D12']
     for name in training_param_names:
-        prior_dict[name+'_loc'] = 0
-        prior_dict[name+'_scale'] = args.prior_std
+        if args.data_dep_prior:
+            prior_dict[name+'_loc'] = res_dict_loaded[name]
+            prior_dict[name+'_scale'] = args.prior_std
+        elif args.nominal_prior:
+            PRIOR_STDP_SCALE = 50 # TODO
+            logger.info('[INFO] Prior distribution is the distribution over nominal controllers, with std scaled by %.4f.' % PRIOR_STDP_SCALE)
+            vals = torch.stack([res[name] for res in res_dict_loaded], dim=0)
+            # val and std computed elementwise. same shape as the training param
+            prior_dict[name+'_loc'] = vals.mean(dim=0)  
+            prior_dict[name+'_scale'] = vals.std(dim=0, correction=1) * PRIOR_STDP_SCALE
+        else:
+            prior_dict[name+'_loc'] = 0
+            prior_dict[name+'_scale'] = args.prior_std
 
 # ------------ 6. Posterior ------------
 gibbs_lambda_star = (8*args.num_rollouts*math.log(1/args.delta))**0.5   # lambda for Gibbs
@@ -146,12 +171,19 @@ gibbs_posterior = GibbsPosterior(
     logger=logger,
 )
 
-
 # ****** INIT SVGD ******
 # initialize trainable params
 dim = (args.num_particles, ctl_generic.num_params)
 
-initial_particles = Normal(0, args.cont_init_std).sample(dim).to(device)
+if args.init_from_prior:
+    logger.info('[INFO] Initializing particles from prior.')
+    INIT_PARTICLE_STD_SCALE = 1
+    initial_particles = Normal(
+        gibbs_posterior.prior.mean().reshape(-1), 
+        gibbs_posterior.prior.stddev().reshape(-1)/PRIOR_STDP_SCALE/INIT_PARTICLE_STD_SCALE
+    ).sample([args.num_particles]).to(device)
+else:
+    initial_particles = Normal(0, args.cont_init_std).sample(dim).to(device)
 
 svgd_cont = SVGDCont(
     gibbs_posterior=gibbs_posterior,
@@ -169,7 +201,7 @@ svgd_cont.fit(
     train_dataloader=train_dataloader, 
     early_stopping=args.early_stopping, tol_percentage=args.tol_percentage, n_logs_no_change=args.n_logs_no_change,
     return_best=args.return_best, log_period=args.log_epoch, epochs=args.epochs,
-    valid_data=valid_data
+    valid_data=valid_data, loss_fn=original_loss_fn, save_folder=save_folder
 )
 logger.info('Training completed.')
 
