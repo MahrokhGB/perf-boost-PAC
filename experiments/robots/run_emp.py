@@ -44,11 +44,13 @@ def train_emp(args):
         train_data_full, test_data = train_data_full.to(device), test_data.to(device)
         # validation data
         if args.early_stopping or args.return_best:
-            logger.info('Using train data for early_stopping or return_best.')
-            valid_data = train_data_full
+            valid_inds = torch.randperm(train_data_full.shape[0])[:int(args.validation_frac*train_data_full.shape[0])]
+            train_inds = [ind for ind in range(train_data_full.shape[0]) if ind not in valid_inds]
+            valid_data = train_data_full[valid_inds, :, :]
+            train_data = train_data_full[train_inds, :, :]
         else:
             valid_data = None
-        train_data = train_data_full
+            train_data = train_data_full
     else:
         # generate train and test
         train_data_full, test_data = dataset.get_data(num_train_samples=args.num_rollouts, num_test_samples=500)

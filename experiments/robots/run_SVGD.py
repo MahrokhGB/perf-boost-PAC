@@ -207,13 +207,9 @@ logger.info('Training completed.')
 
 # ------ Save trained model ------
 particles = svgd_cont.particles.detach().clone()
-res_dict = {
-    'particles':particles,
-    'num_rollouts':args.num_rollouts,
-    'Q':Q, 'alpha_u':args.alpha_u,
-    'alpha_ca':args.alpha_ca, 'alpha_obst':args.alpha_obst,
-    'dim_internal':args.dim_internal, 'dim_nl':args.dim_nl, 'cont_init_std':args.cont_init_std
-}
+res_dict = args.__dict__
+res_dict['particles'] = particles
+res_dict['Q'] = Q
 # save file name
 filename_save = os.path.join(save_folder, 'trained_model')
 torch.save(res_dict, filename_save)

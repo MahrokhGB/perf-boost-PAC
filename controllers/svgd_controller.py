@@ -156,7 +156,7 @@ class SVGDCont():
         last_params = self.particles.detach().clone()  # params in the last iteration
 
         t = time.time()
-        svgd_loss_hist = [None]*epochs
+        svgd_loss_hist = [None]*(1+epochs)
         for epoch in range(1+epochs):
             # iterate over all data batches
             for train_data_batch in train_dataloader:
@@ -169,14 +169,13 @@ class SVGDCont():
                     self.unknown_err = True
             
             last_params = self.particles.detach().clone()
-            svgd_loss_hist[epoch]= self.svgd.log_prob_particles.item() #to('cpu').data.numpy()
+            svgd_loss_hist[epoch]= -self.svgd.log_prob_particles.item() #to('cpu').data.numpy()
 
             # --- print stats ---
             if (epoch % log_period == 0) and (not self.unknown_err):
                 # print(self.particles.detach().clone()[0,0:10])
                 duration = time.time() - t
-                t = time.time()
-                message = 'Epoch %d/%d - Time %.2f sec - SVGD Loss in epoch %.4f' % (
+                message = 'Epoch %d/%d - Elapsed time %.2f sec - SVGD Loss in epoch %.4f' % (
                     epoch, epochs, duration, self.svgd.log_prob_particles
                 )
 
@@ -197,6 +196,7 @@ class SVGDCont():
                         if valid_res < min_valid_res:
                             min_valid_res = valid_res
                             self.best_particles = self.particles.detach().clone()
+                            message += ' --- best model updated'
 
                     # early stopping
                     if early_stopping:
