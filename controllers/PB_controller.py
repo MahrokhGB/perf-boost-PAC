@@ -5,8 +5,6 @@ import numpy as np
 from config import device
 from .contractive_ren import ContractiveREN
 from controllers.ssm import DeepSSM
-from assistive_functions import to_tensor
-
 
 class PerfBoostController(nn.Module):
     """
@@ -32,6 +30,7 @@ class PerfBoostController(nn.Module):
                  contraction_rate_lb: float = 1.0,
                  ren_internal_state_init=None,
                  # misc
+                 train_method: str = 'empirical',
                  output_amplification: float = 20,
                  ):
         """
@@ -49,10 +48,12 @@ class PerfBoostController(nn.Module):
             pos_def_tol (float):          [Optional] Positive and negligible scalar to force positive definite matrices.
             contraction_rate_lb (float):  [Optional] Lower bound on the contraction rate. Default to 1.
             ren_internal_state_init (torch.Tensor): [Optional] Initial state of the REN. Default to 0 when None.
+            train_method (str): Training method. Defaults to empirical
         """
         super().__init__()
 
         self.output_amplification = output_amplification
+        self.train_method = train_method
 
         # set initial conditions
         self.input_init = input_init.reshape(1, -1)
@@ -70,7 +71,8 @@ class PerfBoostController(nn.Module):
                 dim_in=self.dim_in, dim_out=self.dim_out, dim_internal=dim_internal,
                 dim_nl=dim_nl, initialization_std=initialization_std,
                 internal_state_init=ren_internal_state_init,
-                pos_def_tol=pos_def_tol, contraction_rate_lb=contraction_rate_lb
+                pos_def_tol=pos_def_tol, contraction_rate_lb=contraction_rate_lb,
+                train_method=train_method
             ).to(device)
         elif nn_type == "SSM":
             # define the SSM
@@ -150,13 +152,25 @@ class PerfBoostController(nn.Module):
         return np.concatenate([p.detach().clone().cpu().numpy().flatten() for p in self.emme.parameters()])
 
     def set_parameter(self, name, value):
-        if self.nn_type == 'SSM':
-            print("This function might not work for SSMs.....")
-        current_val = getattr(self.emme, name)
-        value = torch.nn.Parameter(torch.tensor(value.reshape(current_val.shape)))
-        setattr(self.emme, name, value)
-        if self.nn_type == 'REN':
-            self.emme._update_model_param()  # update dependent params
+        # TODO: merge two versions
+        # old
+        param_shape = getattr(self.c_ren, name+'_shape')
+        if torch.empty(param_shape).nelement()==value.nelement():
+            value = value.reshape(param_shape)
+        else:
+            value = value.reshape(value.shape[0], *param_shape)
+        if self.train_method=='empirical':
+            value = torch.nn.Parameter(value)
+        setattr(self.c_ren, name, value)
+        self.c_ren._update_model_param()    # update dependent params
+        # new
+        # if self.nn_type == 'SSM':
+        #     print("This function might not work for SSMs.....")
+        # current_val = getattr(self.emme, name)
+        # value = torch.nn.Parameter(torch.tensor(value.reshape(current_val.shape)))
+        # setattr(self.emme, name, value)
+        # if self.nn_type == 'REN':
+        #     self.emme._update_model_param()  # update dependent params
 
     def set_parameters(self, param_dict):
         for name, value in param_dict.items():
@@ -183,8 +197,13 @@ class PerfBoostController(nn.Module):
             else:
                 raise AssertionError
             # set
-            with torch.no_grad():
-                self.set_parameter(name, value_tmp.reshape(shape))
+            if self.c_ren.train_method in ['SVGD', 'normflow']:
+                self.set_parameter(name, value_tmp)
+            elif self.c_ren.train_method=='empirical':
+                with torch.no_grad():
+                    self.set_parameter(name, value_tmp)
+            else:
+                raise NotImplementedError
             idx = idx_next
         assert idx_next == value.shape[-1]
 
