@@ -85,6 +85,9 @@ class PerfBoostController(nn.Module):
                                 ).to(device)
         else:
             raise ValueError("Model for emme not implemented")
+        
+        # set number of trainable params
+        self.num_params = self.emme.num_params
 
         # define the system dynamics without process noise
         self.noiseless_forward = noiseless_forward
@@ -154,15 +157,15 @@ class PerfBoostController(nn.Module):
     def set_parameter(self, name, value):
         # TODO: merge two versions
         # old
-        param_shape = getattr(self.c_ren, name+'_shape')
+        param_shape = getattr(self.emme, name+'_shape')
         if torch.empty(param_shape).nelement()==value.nelement():
             value = value.reshape(param_shape)
         else:
             value = value.reshape(value.shape[0], *param_shape)
         if self.train_method=='empirical':
             value = torch.nn.Parameter(value)
-        setattr(self.c_ren, name, value)
-        self.c_ren._update_model_param()    # update dependent params
+        setattr(self.emme, name, value)
+        self.emme._update_model_param()    # update dependent params
         # new
         # if self.nn_type == 'SSM':
         #     print("This function might not work for SSMs.....")
@@ -177,6 +180,10 @@ class PerfBoostController(nn.Module):
             self.set_parameter(name, value)
 
     def set_parameters_as_vector(self, value):
+        # flatten vec if not batched
+        if value.nelement()==self.num_params:
+            value = value.flatten()
+
         if self.nn_type == 'SSM':
             print("This function might not work for SSMs.....")
         idx = 0
@@ -187,19 +194,21 @@ class PerfBoostController(nn.Module):
             elif len(shape) == 2:
                 dim = shape[0] * shape[1]
             else:
-                raise NotImplementedError
+                dim = shape[-1]*shape[-2]
             idx_next = idx + dim
             # select index
             if len(value.shape) == 1:
                 value_tmp = value[idx:idx_next]
             elif len(value.shape) == 2:
                 value_tmp = value[:, idx:idx_next]
+            elif value.ndim == 3:
+                value_tmp = value[:, :, idx:idx_next]
             else:
                 raise AssertionError
             # set
-            if self.c_ren.train_method in ['SVGD', 'normflow']:
+            if self.emme.train_method in ['SVGD', 'normflow']:
                 self.set_parameter(name, value_tmp)
-            elif self.c_ren.train_method=='empirical':
+            elif self.emme.train_method=='empirical':
                 with torch.no_grad():
                     self.set_parameter(name, value_tmp)
             else:

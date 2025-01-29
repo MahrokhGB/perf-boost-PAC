@@ -150,7 +150,7 @@ def train_emp(args):
     
     # ------ 7. Save and evaluate the trained model ------
     # save
-    res_dict = ctl_generic.c_ren.state_dict()
+    res_dict = ctl_generic.emme.state_dict()
     print('res_dict', res_dict['X'][0][0:5])
     res_dict['Q'] = Q
     filename = os.path.join(save_folder, 'trained_controller'+'.pt')

@@ -233,7 +233,7 @@ for num_rollouts in S:
 #     #     1/lambda_*math.log(sum(exp_neg_loss) + (math.exp(-lambda_*C)-1)*(math.log(1/deltahat)/2/num_prior_samples)**0.5)
 
     # # ------------ swapping denom ------------
-    # # ctl_generic.c_ren.hard_reset()
+    # # ctl_generic.emme.hard_reset()
 
     # num_samples = 100
     # sample_from = 'nf_post' #'prior' # 'nf_post'

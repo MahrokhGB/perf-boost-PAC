@@ -29,7 +29,7 @@ def get_neg_log_zhat_over_lambda(
             prior_samples = prior.sample(torch.Size([samples_in_batch]))
         # evaluate samples controllers
         ctl_generic.reset()
-        ctl_generic.c_ren.hard_reset()
+        ctl_generic.emme.hard_reset()
         train_loss_batch, _ = eval_norm_flow(
             sys=sys, ctl_generic=ctl_generic, data=train_data,
             num_samples=None,nfm=None,

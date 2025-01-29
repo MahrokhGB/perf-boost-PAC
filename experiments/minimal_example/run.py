@@ -134,7 +134,7 @@ if args.return_best:
 
 # ------ 7. Save and evaluate the trained model ------
 # save
-res_dict = ctl.c_ren.state_dict()
+res_dict = ctl.emme.state_dict()
 res_dict['Q'] = Q
 filename = os.path.join(save_folder, 'trained_controller'+'.pt')
 torch.save(res_dict, filename)

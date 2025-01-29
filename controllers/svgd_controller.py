@@ -157,7 +157,7 @@ class SVGDCont():
 
         t = time.time()
         svgd_loss_hist = [None]*(1+epochs)
-        for epoch in range(1+epochs):
+        for epoch in range(1,1+epochs):
             # iterate over all data batches
             for train_data_batch in train_dataloader:
                 # take a step

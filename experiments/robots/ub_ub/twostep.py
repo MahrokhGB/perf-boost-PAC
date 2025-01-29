@@ -178,7 +178,7 @@ mcdim_terms = []
 for lambda_P, lambda_Q, S_P in zip(lambda_P_range, lambda_Q_range, num_rollouts_P_range):
     logger.info('\n\n------ Training prior using '+str(S_P)+' rollouts ------')
     ctl_generic.reset()
-    ctl_generic.c_ren.hard_reset()
+    ctl_generic.emme.hard_reset()
     # train data for prior
     train_data_P = train_data_full[:S_P, :]
     train_dataloader_P = DataLoader(train_data_P, batch_size=min(int(S_P), 256), shuffle=False)
