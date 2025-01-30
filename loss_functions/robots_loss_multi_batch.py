@@ -88,6 +88,9 @@ class RobotsLossMultiBatch(LQLossFHMultiBatch):
         loss_val = torch.sum(loss_val, -3)/loss_val.shape[-3]       # shape = (*batch_dim[0:-2], 1, 1)
         return loss_val
 
+    def __call__(self, *args, **kwds):
+        return self.forward(*args, **kwds)
+    
     def f_loss_obst(self, x_batch):
         """
         Obstacle avoidance loss.

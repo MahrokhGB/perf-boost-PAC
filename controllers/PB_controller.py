@@ -248,7 +248,7 @@ class PerfBoostController(nn.Module):
                 for train_data_batch in train_dataloader:
                     optimizer.zero_grad()
                     # Simulate over horizon steps
-                    x_log, _, u_log = sys.rollout(controller=self, data=train_data_batch, train=True)
+                    x_log, _, u_log = sys.rollout(controller=self, data=train_data_batch)
                     # Calculate loss of all rollouts in the batch
                     loss = loss_fn(x_log, u_log)
                     train_loss_batch += loss.item()
@@ -262,7 +262,7 @@ class PerfBoostController(nn.Module):
                     if return_best or early_stopping:
                         # Rollout the current controller on the validation data
                         with torch.no_grad():
-                            x_log_valid, _, u_log_valid = sys.rollout(controller=self, data=valid_data, train=False)
+                            x_log_valid, _, u_log_valid = sys.rollout(controller=self, data=valid_data)
                             # Calculate validation loss
                             loss_valid = loss_fn(x_log_valid, u_log_valid)
                         msg += f' ---||--- validation loss: {loss_valid.item():.2f}'
@@ -288,7 +288,7 @@ class PerfBoostController(nn.Module):
                     if fitted:
                         break
         except Exception as e:
-            logger.error(f'An error occurred during training: {e}')
+            logger.info(f'An error occurred during training: {e}')
             raise e
 
         # Set to best seen parameters during training
