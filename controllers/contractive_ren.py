@@ -29,7 +29,7 @@ class ContractiveREN(nn.Module):
     def __init__(
         self, dim_in: int, dim_out: int, dim_internal: int,
         dim_nl: int, internal_state_init = None, initialization_std: float = 0.5,
-        pos_def_tol: float = 0.001, contraction_rate_lb: float = 1.0,
+        posdef_tol: float = 0.001, contraction_rate_lb: float = 1.0,
         train_method:str = 'empirical',
     ):
         """
@@ -58,7 +58,7 @@ class ContractiveREN(nn.Module):
         assert self.train_method in ['empirical', 'normflow', 'SVGD']
 
         # auxiliary elements
-        self.epsilon = pos_def_tol
+        self.epsilon = posdef_tol
 
         # initialize internal state
         if internal_state_init is None:
