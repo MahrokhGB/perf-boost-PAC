@@ -44,11 +44,13 @@ def train_emp(args):
         train_data_full, test_data = train_data_full.to(device), test_data.to(device)
         # validation data
         if args.early_stopping or args.return_best:
-            logger.info('Using train data for early_stopping or return_best.')
-            valid_data = train_data_full
+            valid_inds = torch.randperm(train_data_full.shape[0])[:int(args.validation_frac*train_data_full.shape[0])]
+            train_inds = [ind for ind in range(train_data_full.shape[0]) if ind not in valid_inds]
+            valid_data = train_data_full[valid_inds, :, :]
+            train_data = train_data_full[train_inds, :, :]
         else:
             valid_data = None
-        train_data = train_data_full
+            train_data = train_data_full
     else:
         # generate train and test
         train_data_full, test_data = dataset.get_data(num_train_samples=args.num_rollouts, num_test_samples=500)
@@ -60,7 +62,6 @@ def train_emp(args):
             valid_data = train_data_full[valid_inds, :, :]
             train_data = train_data_full[train_inds, :, :]
         else:
-            valid_data = None
             train_data = train_data_full
     # data for plots
     t_ext = args.horizon * 4
@@ -128,6 +129,12 @@ def train_emp(args):
         n_agents=sys.n_agents,
     )
 
+    # ------------ 5. Optimizer ------------
+    optimizer = torch.optim.Adam(ctl_generic.parameters(), lr=args.lr)
+    # queue of validation losses for early stopping
+    if args.early_stopping:
+        valid_imp_queue = [100]*args.n_logs_no_change   # don't stop at the beginning
+
     # ------------ 6. Training ------------
     # plot closed-loop trajectories before training the controller
     logger.info('Plotting closed-loop trajectories before training the controller...')
@@ -141,16 +148,71 @@ def train_emp(args):
         obstacle_covs=original_loss_fn.obstacle_covs,
         plot_collisions=True, min_dist=args.min_dist
     )
-    ctl_generic.fit(
-        sys=sys, train_dataloader=train_dataloader, valid_data=valid_data, 
-        lr=args.lr, loss_fn=original_loss_fn, epochs=args.epochs, log_epoch=args.log_epoch, 
-        return_best=args.return_best, logger=logger, early_stopping=args.early_stopping, 
-        n_logs_no_change=args.n_logs_no_change, tol_percentage=args.tol_percentage
-    )
-    
+    logger.info('\n------------ Begin training ------------')
+    best_valid_loss = 1e6
+    t = time.time()
+    for epoch in range(1+args.epochs):
+        # iterate over all data batches
+        train_loss_batch = 0
+        for train_data_batch in train_dataloader:
+            optimizer.zero_grad()
+            # simulate over horizon steps
+            x_log, _, u_log = sys.rollout(
+                controller=ctl_generic, data=train_data_batch
+            )
+            # loss of this rollout
+            loss = original_loss_fn.forward(x_log, u_log)
+            train_loss_batch += loss.item()
+            # take a step
+            loss.backward()
+            optimizer.step()
+
+        # print info
+        if epoch%args.log_epoch == 0:
+            msg = 'Epoch: %i --- batch train loss: %.2f'% (epoch, train_loss_batch)
+            duration = time.time() - t
+            msg += ' ---||--- elapsed time: %.0f s' % (duration)
+            # print(ctl_generic.get_parameters_as_vector()[0:10])
+
+            if args.return_best or args.early_stopping:
+                # rollout the current controller on the valid data
+                with torch.no_grad():
+                    x_log_valid, _, u_log_valid = sys.rollout(
+                        controller=ctl_generic, data=valid_data
+                    )
+                    # loss of the valid data
+                    original_loss_valid = original_loss_fn.forward(x_log_valid, u_log_valid)
+                    bounded_loss_valid = bounded_loss_fn.forward(x_log_valid, u_log_valid)
+                msg += ' ---||--- validation loss: %.2f' % (original_loss_valid.item())
+                msg += ' ---||--- bounded validation loss: %.2f' % (bounded_loss_valid.item())
+                # compare with the best valid loss
+                imp = 100 * (best_valid_loss-original_loss_valid.item())/best_valid_loss
+                if imp>0:
+                    best_valid_loss = original_loss_valid.item()
+                    if args.return_best:
+                            best_params = ctl_generic.get_parameters_as_vector().detach().clone()  # record state dict if best on valid
+                            msg += ' (best so far)'
+                if args.early_stopping:
+                    # add the current valid loss to the queue
+                    valid_imp_queue.pop(0)
+                    valid_imp_queue.append(imp)
+                    # check if there is no improvement
+                    if all([valid_imp_queue[i] <args.tol_percentage for i in range(args.n_logs_no_change)]):
+                        msg += ' ---||--- early stopping at epoch %i' % (epoch)
+                        logger.info(msg)
+                        break
+                print('best_params', best_params[0:5], '\n')
+            logger.info(msg)
+            
+
+    # set to best seen during training
+    if args.return_best:
+        ctl_generic.set_parameters_as_vector(best_params)
+    print('best_params', best_params[0:5])
+
     # ------ 7. Save and evaluate the trained model ------
     # save
-    res_dict = ctl_generic.emme.state_dict()
+    res_dict = ctl_generic.c_ren.state_dict()
     print('res_dict', res_dict['X'][0][0:5])
     res_dict['Q'] = Q
     filename = os.path.join(save_folder, 'trained_controller'+'.pt')
