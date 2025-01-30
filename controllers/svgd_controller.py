@@ -120,7 +120,7 @@ class SVGDCont():
     # ---------- FIT ----------
     def fit(self, train_dataloader, epochs, 
             early_stopping, tol_percentage=None, n_logs_no_change=None,
-            return_best=True, valid_data=None, log_period=500, save_folder=None):
+            return_best=True, valid_data=None, log_period=500, loss_fn=None, save_folder=None):
         """
         fits the hyper-posterior particles with SVGD
 
@@ -157,7 +157,7 @@ class SVGDCont():
 
         t = time.time()
         svgd_loss_hist = [None]*(1+epochs)
-        for epoch in range(1,1+epochs):
+        for epoch in range(1+epochs):
             # iterate over all data batches
             for train_data_batch in train_dataloader:
                 # take a step
@@ -183,7 +183,7 @@ class SVGDCont():
                 if valid_data is not None:
                     # evaluate on validation set
                     try:
-                        valid_res = self.eval_rollouts(valid_data, loss_fn=self.posterior.loss_fn)
+                        valid_res = self.eval_rollouts(valid_data, loss_fn=loss_fn)
                         message +=  ', Valid Loss: {:2.4f}'.format(valid_res)
                     except Exception as e:
                         message += '[Unhandled ERR] in eval valid rollouts:'
