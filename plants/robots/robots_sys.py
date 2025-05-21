@@ -105,7 +105,7 @@ class RobotsSystem(torch.nn.Module):
         Returns:
             next state.
         """
-        return self.noiseless_forward(t, x, u) + w.view(*w.shape[:-2], 1, self.state_dim)*self.h # NOTE: different from base
+        return self.noiseless_forward(t, x, u) + w.view(*w.shape[:-2], 1, self.state_dim) #*self.h # NOTE: different from base
 
     # simulation
     def rollout(self, controller, data):

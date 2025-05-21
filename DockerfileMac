@@ -1,0 +1,19 @@
+# Basic image based on ubuntu 22.04
+FROM nvcr.io/nvidia/pytorch:22.01-py3
+
+# Install packages
+RUN apt update
+RUN apt install python3-pip -y
+
+# Create the my-application inside the container.
+RUN mkdir my-application
+
+# Copy all files from my current local directory
+# to the my-application directory inside the container.
+COPY . /my-application
+
+# Set the working directory of the container
+WORKDIR my-application
+
+# Install Python dependencies
+# RUN pip install 
