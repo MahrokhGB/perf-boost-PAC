@@ -37,20 +37,12 @@ def train_emp(args):
     # ------------ 1. Dataset ------------
     dataset = RobotsDataset(random_seed=args.random_seed, horizon=args.horizon, std_ini=args.std_init_plant, n_agents=2)
     if args.nominal_exp:
-        # generate train and test
-        _, test_data = dataset.get_data(num_train_samples=args.num_rollouts, num_test_samples=500)
-        train_data_full = torch.zeros(1, args.horizon, test_data.shape[-1], device=device)
-        train_data_full[:, 0, :] = (dataset.x0.detach() - dataset.xbar)
-        train_data_full, test_data = train_data_full.to(device), test_data.to(device)
-        # validation data
-        if args.early_stopping or args.return_best:
-            valid_inds = torch.randperm(train_data_full.shape[0])[:int(args.validation_frac*train_data_full.shape[0])]
-            train_inds = [ind for ind in range(train_data_full.shape[0]) if ind not in valid_inds]
-            valid_data = train_data_full[valid_inds, :, :]
-            train_data = train_data_full[train_inds, :, :]
-        else:
-            valid_data = None
-            train_data = train_data_full
+        # generate validation and test
+        valid_data, test_data = dataset.get_data(num_train_samples=args.num_rollouts, num_test_samples=500)
+        train_data = torch.zeros(1, args.horizon, test_data.shape[-1], device=device)
+        train_data[:, 0, :] = (dataset.x0.detach() - dataset.xbar)
+        train_data, valid_data, test_data = train_data.to(device), valid_data.to(device), test_data.to(device)
+        train_data_full = train_data
     else:
         # generate train and test
         train_data_full, test_data = dataset.get_data(num_train_samples=args.num_rollouts, num_test_samples=500)

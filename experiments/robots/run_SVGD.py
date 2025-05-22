@@ -178,6 +178,7 @@ dim = (args.num_particles, ctl_generic.num_params)
 if args.init_from_prior:
     logger.info('[INFO] Initializing particles from prior.')
     INIT_PARTICLE_STD_SCALE = 1
+    PRIOR_STDP_SCALE = 50
     initial_particles = Normal(
         gibbs_posterior.prior.mean().reshape(-1), 
         gibbs_posterior.prior.stddev().reshape(-1)/PRIOR_STDP_SCALE/INIT_PARTICLE_STD_SCALE
