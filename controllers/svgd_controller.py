@@ -92,7 +92,7 @@ class SVGDCont():
         assert len(res_xs) == self.num_particles
         return res_xs, res_ys, res_us
 
-    def eval_rollouts(self, data, get_full_list=False, loss_fn=None):
+    def eval_rollouts(self, data, count_collisions=True, get_full_list=False, loss_fn=None):
         """
         evaluates several rollouts given by 'data'.
         if 'get_full_list' is True, returns a list of losses for each particle.
@@ -100,22 +100,27 @@ class SVGDCont():
         if 'loss_fn' is None, uses the bounded loss function as in Gibbs posterior.
         loss_fn can be provided to evaluate the dataset using the original unbounded loss.
         """
+        if loss_fn is None:
+            loss_fn = self.posterior.loss_fn
         with torch.no_grad():
             losses=[None]*self.num_particles
+            num_cols=[None]*self.num_particles
             res_xs, _, res_us = self.rollout(data)
             for particle_num in range(self.num_particles):
-                if loss_fn is None:
-                    losses[particle_num] = self.posterior.loss_fn.forward(
-                        res_xs[particle_num], res_us[particle_num]
-                    ).item()
-                else:
-                    losses[particle_num] = loss_fn.forward(
-                        res_xs[particle_num], res_us[particle_num]
-                    ).item()
-        if get_full_list:
-            return losses
+                losses[particle_num] = loss_fn.forward(
+                    res_xs[particle_num], res_us[particle_num]
+                ).item()
+                if count_collisions:
+                    num_cols[particle_num] = loss_fn.forward(
+                            res_xs[particle_num], res_us[particle_num]
+                        )
+        if not get_full_list:
+            losses = sum(losses)/self.num_particles
+            num_cols = sum(num_cols)/self.num_particles
+        if count_collisions:
+            return losses, num_cols
         else:
-            return sum(losses)/self.num_particles
+            return losses
 
     # ---------- FIT ----------
     def fit(self, train_dataloader, epochs, 
@@ -218,7 +223,6 @@ class SVGDCont():
                     plt.plot(svgd_loss_hist[:epoch+1], label='loss')
                     plt.legend()
                     plt.savefig(os.path.join(save_folder, 'loss.pdf'))
-                    plt.show()
 
 
             # go one iter back if non-psd

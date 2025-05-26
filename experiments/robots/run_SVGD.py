@@ -218,14 +218,19 @@ logger.info('model saved.')
 
 # ------------ 5. Test Dataset ------------
 # eval on train data
-bounded_train_loss = svgd_cont.eval_rollouts(train_data_full)
-original_train_loss = svgd_cont.eval_rollouts(train_data_full, loss_fn=original_loss_fn)
-logger.info('Final results on the entire train data: Bounded train loss = {:.4f}, original train loss = {:.4f}'.format(
+bounded_train_loss = svgd_cont.eval_rollouts(train_data_full, count_collisions=False)
+original_train_loss, train_num_cols = svgd_cont.eval_rollouts(train_data_full, loss_fn=original_loss_fn, count_collisions=args.col_av)
+msg = 'Final results on the entire train data: Bounded train loss = {:.4f}, original train loss = {:.4f}'.format(
     bounded_train_loss, original_train_loss
-))
-bounded_test_loss = svgd_cont.eval_rollouts(test_data)
-original_test_loss = svgd_cont.eval_rollouts(test_data, loss_fn=original_loss_fn)
-msg = 'True bounded test loss = {:.4f}, '.format(bounded_test_loss)
+)
+if args.col_av:
+    msg += ', train num collisions = {:3.0f}'.format(train_num_cols)
+# eval on test data
+bounded_test_loss = svgd_cont.eval_rollouts(test_data, count_collisions=False)
+original_test_loss, test_num_cols = svgd_cont.eval_rollouts(test_data, loss_fn=original_loss_fn, count_collisions=args.col_av)
+msg += 'True bounded test loss = {:.4f}, '.format(bounded_test_loss)
 msg += 'true original test loss = {:.2f} '.format(original_test_loss)
 msg += '(approximated using {:3.0f} test rollouts).'.format(test_data.shape[0])
+if args.col_av:
+    msg += ', test num collisions = {:3.0f}'.format(test_num_cols)
 logger.info(msg)

@@ -14,21 +14,9 @@ from controllers import PerfBoostController, AffineController, NNController
 from loss_functions import RobotsLossMultiBatch
 from utils.assistive_functions import WrapLogger
 
-def train_emp(args):
+def train_emp(args, logger, save_folder):
     TRAIN_METHOD = 'empirical'
     
-    # ----- SET UP LOGGER -----
-    now = datetime.now().strftime("%m_%d_%H_%M_%S")
-    if args.nominal_exp:
-        save_path = os.path.join(BASE_DIR, 'experiments', 'robots', 'saved_results', 'nominal')
-    else:
-        save_path = os.path.join(BASE_DIR, 'experiments', 'robots', 'saved_results', 'empirical')
-    save_folder = os.path.join(save_path, args.cont_type+'_'+now)
-    os.makedirs(save_folder)
-    logging.basicConfig(filename=os.path.join(save_folder, 'log'), format='%(asctime)s %(message)s', filemode='w')
-    logger = logging.getLogger('perf_boost_')
-    logger.setLevel(logging.DEBUG)
-    logger = WrapLogger(logger)
     msg = print_args(args, TRAIN_METHOD)
     logger.info(msg)
 
@@ -193,24 +181,14 @@ def train_emp(args):
                         msg += ' ---||--- early stopping at epoch %i' % (epoch)
                         logger.info(msg)
                         break
-                print('best_params', best_params[0:5], '\n')
             logger.info(msg)
             
 
     # set to best seen during training
     if args.return_best:
         ctl_generic.set_parameters_as_vector(best_params)
-    print('best_params', best_params[0:5])
 
     # ------ 7. Save and evaluate the trained model ------
-    # save
-    res_dict = ctl_generic.c_ren.state_dict()
-    print('res_dict', res_dict['X'][0][0:5])
-    res_dict['Q'] = Q
-    filename = os.path.join(save_folder, 'trained_controller'+'.pt')
-    torch.save(res_dict, filename)
-    logger.info('[INFO] saved trained model.')
-
     # evaluate on the train data
     logger.info('\n[INFO] evaluating the trained controller on %i training rollouts.' % train_data_full.shape[0])
     with torch.no_grad():
@@ -218,12 +196,14 @@ def train_emp(args):
             controller=ctl_generic, data=train_data_full
         )   # use the entire train data, not a batch
         # evaluate losses
-        loss = original_loss_fn.forward(x_log, u_log)
-        msg = 'Loss: %.4f' % (loss)
+        train_loss = original_loss_fn.forward(x_log, u_log)
+        msg = 'Loss: %.4f' % (train_loss)
     # count collisions
     if args.col_av:
-        num_col = original_loss_fn.count_collisions(x_log)
-        msg += ' -- Number of collisions = %i' % num_col
+        train_num_col = original_loss_fn.count_collisions(x_log)
+        msg += ' -- Number of collisions = %i' % train_num_col
+    else:
+        train_num_col = None
     logger.info(msg)
 
     # evaluate on the test data
@@ -238,8 +218,10 @@ def train_emp(args):
         msg = "Loss: %.4f" % (test_loss)
     # count collisions
     if args.col_av:
-        num_col = original_loss_fn.count_collisions(x_log)
-        msg += ' -- Number of collisions = %i' % num_col
+        test_num_col = original_loss_fn.count_collisions(x_log)
+        msg += ' -- Number of collisions = %i' % test_num_col
+    else: 
+        test_num_col = None
     logger.info(msg)
 
     # plot closed-loop trajectories using the trained controller
@@ -255,6 +237,17 @@ def train_emp(args):
         plot_collisions=True, min_dist=args.min_dist
     )
 
+    # save
+    res_dict = ctl_generic.c_ren.state_dict()
+    res_dict['Q'] = Q
+    res_dict['train_loss'] = train_loss.item()
+    res_dict['train_num_col'] = train_num_col
+    res_dict['test_loss'] = test_loss
+    res_dict['test_num_col'] = test_num_col
+    filename = os.path.join(save_folder, 'trained_controller'+'.pt')
+    torch.save(res_dict, filename)
+    logger.info('[INFO] saved trained model.')
+
     return res_dict, filename
 
 
@@ -262,4 +255,17 @@ def train_emp(args):
 if __name__=='__main__':
     # ----- parse and set experiment arguments -----
     args = argument_parser()
-    train_emp(args)
+    # ----- SET UP LOGGER -----
+    now = datetime.now().strftime("%m_%d_%H_%M_%S")
+    if args.nominal_exp:
+        save_path = os.path.join(BASE_DIR, 'experiments', 'robots', 'saved_results', 'nominal')
+    else:
+        save_path = os.path.join(BASE_DIR, 'experiments', 'robots', 'saved_results', 'empirical')
+    save_folder = os.path.join(save_path, args.cont_type+'_'+now)
+    os.makedirs(save_folder)
+    logging.basicConfig(filename=os.path.join(save_folder, 'log'), format='%(asctime)s %(message)s', filemode='w')
+    logger = logging.getLogger('perf_boost_')
+    logger.setLevel(logging.DEBUG)
+    logger = WrapLogger(logger)
+    # ----- run experiment -----
+    train_emp(args, logger, save_folder)
