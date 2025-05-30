@@ -116,7 +116,8 @@ class SVGDCont():
                         )
         if not get_full_list:
             losses = sum(losses)/self.num_particles
-            num_cols = sum(num_cols)/self.num_particles
+            if count_collisions:
+                num_cols = sum(num_cols)/self.num_particles
         if count_collisions:
             return losses, num_cols
         else:
@@ -188,12 +189,13 @@ class SVGDCont():
                 if valid_data is not None:
                     # evaluate on validation set
                     try:
-                        valid_res = self.eval_rollouts(valid_data, loss_fn=loss_fn)
+                        valid_res = self.eval_rollouts(valid_data, loss_fn=loss_fn, count_collisions=False)
                         message +=  ', Valid Loss: {:2.4f}'.format(valid_res)
                     except Exception as e:
                         message += '[Unhandled ERR] in eval valid rollouts:'
                         self.logger.info(e)
                         self.unknown_err = True
+                        exit()
 
                     # update the best particles if return_best
                     imp = 100 * (min_valid_res-valid_res)/min_valid_res

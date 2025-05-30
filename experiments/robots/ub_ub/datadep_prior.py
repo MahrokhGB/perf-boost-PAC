@@ -17,7 +17,7 @@ from inference_algs.distributions import GibbsPosterior
 from inference_algs.normflow_assist.mynf import NormalizingFlow
 from inference_algs.normflow_assist import GibbsWrapperNF
 from ub_utils import get_mcdim_ub
-from inference_algs.normflow_assist import train_norm_flow
+from inference_algs.normflow_assist import fit_norm_flow
 
 
 num_prior_samples = 10**6   # TODO: move to arg parser
@@ -185,7 +185,7 @@ nfm.to(device)  # Move model on GPU if available
 
 # train nfm
 optimizer = torch.optim.Adam(nfm.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-train_norm_flow(
+fit_norm_flow(
     nfm=nfm, sys=sys, ctl_generic=ctl_generic, logger=logger, bounded_loss_fn=bounded_loss_fn,
     save_folder=save_folder, train_data=train_data_full, test_data=test_data, plot_data=plot_data,
     optimizer=optimizer, epochs=args.epochs, log_epoch=args.log_epoch, annealing=args.annealing,

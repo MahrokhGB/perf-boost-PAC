@@ -7,7 +7,7 @@
 # sys.path.insert(1, BASE_DIR)
 
 # from config import device
-# from inference_algs.normflow_assist import train_norm_flow
+# from inference_algs.normflow_assist import fit_norm_flow
 # from arg_parser import argument_parser, print_args
 # from plants import RobotsSystem, RobotsDataset
 # from utils.plot_functions import *

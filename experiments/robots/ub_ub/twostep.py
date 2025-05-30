@@ -17,7 +17,7 @@ from inference_algs.distributions import GibbsPosterior
 from inference_algs.normflow_assist.mynf import NormalizingFlow
 from inference_algs.normflow_assist import GibbsWrapperNF
 from ub_utils import get_mcdim_ub
-from inference_algs.normflow_assist import train_norm_flow
+from inference_algs.normflow_assist import fit_norm_flow
 
 num_prior_samples = 10**6   # TODO: move to arg parser
 # usual setup
@@ -268,7 +268,7 @@ for lambda_P, lambda_Q, S_P in zip(lambda_P_range, lambda_Q_range, num_rollouts_
 
     # train nfm
     optimizer = torch.optim.Adam(nfm.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    train_norm_flow(
+    fit_norm_flow(
         nfm=nfm, sys=sys, ctl_generic=ctl_generic, logger=logger, loss_fn=bounded_loss_fn,
         save_folder=save_folder, train_data_full=train_data_P, test_data=test_data, plot_data=plot_data,
         return_best=args.return_best, validation_frac=args.validation_frac,

@@ -8,7 +8,7 @@ sys.path.insert(1, BASE_DIR)
 from utils.plot_functions import plot_trajectories
 from inference_algs.normflow_assist import eval_norm_flow
 
-def train_norm_flow(
+def fit_norm_flow(
     nfm, sys, ctl_generic, logger, loss_fn, save_folder, 
     train_data_full, test_data, plot_data,
     optimizer, epochs, log_epoch, annealing, anneal_iter, return_best, 
@@ -42,7 +42,6 @@ def train_norm_flow(
             if dist_name=='base':
                 z = dist.sample(num_samples_nf_eval)
                 z_mean = dist.loc
-                print('z_mean', z_mean[0][0:5])
             else:
                 z, _ = dist.sample(num_samples_nf_eval)
                 z_mean = torch.mean(z, axis=0)
@@ -160,7 +159,6 @@ def train_norm_flow(
             plt.plot(nf_loss_hist, label='loss')
             plt.legend()
             plt.savefig(os.path.join(save_folder, 'loss.pdf'))
-            plt.show()
             
             # plot closed_loop
             _, xs_z_plot = eval_norm_flow(
@@ -213,6 +211,11 @@ def train_norm_flow(
         msg += ' -- total number of collisions = %i' % test_num_col
     logger.info(msg)
 
+    res_dict = {
+        'train_loss':train_loss, 'train_num_col':train_num_col,
+        'test_loss':test_loss, 'test_num_col':test_num_col
+    }
+
     # plot closed-loop trajectories using the trained controller
     logger.info('Plotting closed-loop trajectories using the trained controller...')
     with torch.no_grad():
@@ -235,3 +238,4 @@ def train_norm_flow(
             plot_collisions=True, min_dist=loss_fn.min_dist
         )
 
+    return res_dict, os.path.join(save_folder, 'trained_nfm')
