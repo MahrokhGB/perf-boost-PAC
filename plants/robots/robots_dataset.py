@@ -5,7 +5,7 @@ from plants import CostumDataset
 class RobotsDataset(CostumDataset):
     def __init__(self, random_seed, horizon, std_ini=0.2, n_agents=2):
         # experiment and file names
-        exp_name = 'minimal_example'
+        exp_name = 'robots'
         file_name = 'data_T'+str(horizon)+'_stdini'+str(std_ini)+'_agents'+str(n_agents)+'_RS'+str(random_seed)+'.pkl'
 
         super().__init__(random_seed=random_seed, horizon=horizon, exp_name=exp_name, file_name=file_name)

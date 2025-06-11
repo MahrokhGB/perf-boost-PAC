@@ -18,4 +18,3 @@ else:
               "and/or you do not have an MPS-enabled device on this machine.")
     device = torch.device("cpu")
     print('[INFO] running on CPU')
-

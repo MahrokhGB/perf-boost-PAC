@@ -28,11 +28,13 @@ def fit_norm_flow(
     if validation_frac>0:
         valid_inds = torch.randperm(train_data_full.shape[0])[:int(validation_frac*train_data_full.shape[0])]
         train_inds = [ind for ind in range(train_data_full.shape[0]) if ind not in valid_inds]
-        valid_data = train_data_full[valid_inds, :, :]
+        valid_data = train_data_full[valid_inds, :, :] if len(valid_inds)>0 else None
         train_data = train_data_full[train_inds, :, :]
     else:
         train_data = train_data_full
         valid_data = None
+    if valid_data is None:
+        return_best = False
 
     # ------------ Test initial model ------------
     # plot closed-loop trajectories by sampling controller from untrained nfm and base distribution
@@ -133,16 +135,16 @@ def fit_norm_flow(
             if not valid_data is None:
                 msg += ' --- valid loss %f' % loss_z_valid + ' --- valid loss of mean %f' % loss_z_mean_valid
             
-            # compare with the best valid loss
-            imp = 100 * (best_loss-loss_z_valid)/best_loss
-            # update best model
-            if return_best and loss_z_valid < best_loss:
-                best_loss = loss_z_valid
-                best_model_dict = copy.deepcopy(nfm.state_dict())
-                msg += ' --- best model updated'
+                # compare with the best valid loss
+                imp = 100 * (best_loss-loss_z_valid)/best_loss
+                # update best model
+                if return_best and loss_z_valid < best_loss:
+                    best_loss = loss_z_valid
+                    best_model_dict = copy.deepcopy(nfm.state_dict())
+                    msg += ' --- best model updated'
             
             # early stopping
-            if early_stopping:
+            if early_stopping and not valid_data is None:
                 # add the current valid loss to the queue
                 valid_imp_queue.pop(0)
                 valid_imp_queue.append(imp)

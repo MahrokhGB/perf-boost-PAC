@@ -37,7 +37,7 @@ logger = WrapLogger(logger)
 logger.info('---------- Two step training ----------\n')
 logger.info(msg)
 torch.manual_seed(args.random_seed)
-num_prior_samples = 10**12   # TODO: move to arg parser
+num_prior_samples = 10**6   # TODO: move to arg parser
 # usual setup
 BASE_STD_SCALE = 1/args.nominal_prior_std_scale/100 # TODO
 num_samples_nf_train = 100
@@ -93,7 +93,6 @@ bounded_loss_fn = RobotsLossMultiBatch(
 C = bounded_loss_fn.loss_bound
 
 # ------------ 2. Range for num_rollouts_prior ------------
-print('args.num_rollouts', args.num_rollouts)
 num_rollouts_P = np.arange(1, args.num_rollouts, dtype=int)
 num_rollouts_Q = args.num_rollouts*np.ones(args.num_rollouts-1, dtype=int) - num_rollouts_P
 lambdas_P = args.gibbs_lambda * num_rollouts_P / args.num_rollouts
@@ -113,7 +112,7 @@ res_eps = [mcdim_terms[ind]['epsilon/lambda_'] for ind in range(args.num_rollout
 res_const = [mcdim_terms[ind]['ub_const'] for ind in range(args.num_rollouts-1)]
 res_tot = [mcdim_terms[ind]['tot'] for ind in range(args.num_rollouts-1)]
 # find where the sum is smaller than thresh, where thresh is set to 1.1 * min
-thresh = 1.01*min(res_tot) # 1.1*min(res_tot) #TODO
+thresh = 1.1*min(res_tot)
 inds = [i for i in range(len(res_tot)) if res_tot[i] <= thresh]
 lambda_Q_range = [lambdas_Q[ind] for ind in inds]
 lambda_P_range = [lambdas_P[ind] for ind in inds]
@@ -138,14 +137,6 @@ ax.legend(loc='upper left')
 plt.tight_layout()
 plt.savefig(os.path.join(
     save_folder, 'tuning_lambda_Q.png'))
-min_ind = res_tot.index(min(res_tot))
-print('min_ind', min_ind, 
-      '\ngibbs_lambda', args.gibbs_lambda,
-      '\nres_tot', res_tot[min_ind], 
-      '\nres_const', res_const[min_ind], 
-      '\nres_eps', res_eps[min_ind], 
-      '\nnum_rollouts_Q', num_rollouts_Q[min_ind]
-    )
 
 # ------------ 3. Train step 1 ------------
 # prior for step 1

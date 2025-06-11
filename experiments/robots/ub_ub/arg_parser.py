@@ -1,4 +1,5 @@
 import argparse, math
+from ub_utils import get_max_lambda
 
 # argument parser
 def argument_parser():
@@ -53,9 +54,11 @@ def argument_parser():
     parser.add_argument('--prior-std', type=float, default=7, help='Gaussian prior std. Default is 7.')
     # inference - SVGD
     parser.add_argument('--num-particles', type=int, default=1, help='Number of SVGD particles. Default is 1.')
+    parser.add_argument('--init-from-prior', type=str2bool, default=True, help='Initialize particles by sampling from the prior. Default is True.')
     # inference - normflow
     parser.add_argument('--flow-type', type=str, default='Planar', help='Flow type for normflow. Can be Planar, Radial, or NVP. Default is Planar.')
     parser.add_argument('--flow-activation', type=str, default='leaky_relu', help='Activation function of each flow for normflow. Can be tanh or leaky_relu. Default is leaky_relu.')
+    parser.add_argument('--planar-flow-scale', type=float, default=0.1, help='scale for the planar flow. Default is 0.1.')
     parser.add_argument('--num-flows', type=int, default=16, help='Number of transforms in for normflow. Default is 16. Set to 0 for no transforms')
     parser.add_argument('--base-is-prior', type=str2bool, default=False, help='Base distribution for normflow is the same as the prior. Default is False.')
     parser.add_argument('--base-center-emp', type=str2bool, default=False, help='Base distribution for normflow is centered at the controller learned empirically. Default is False.')
@@ -64,9 +67,11 @@ def argument_parser():
     parser.add_argument('--anneal-iter', type=int, default=None, help='Annealing iteration for normflow. Default is half epochs.')
     # inference - Gibbs
     parser.add_argument('--delta', type=float, default=0.1 , help='Delta for Gibbs distribution. PAC bounds hold with prob >= 1- delta. Default is 0.1.')
-    parser.add_argument('--gibbs-lambda', type=float, default=None , help='Lambda is the tempretaure of the Gibbs distribution. Default is lambda_star (see the paper).')
+    parser.add_argument('--gibbs-lambda', type=float, default=-1 , help='Lambda is the tempretaure of the Gibbs distribution. Default is lambda_star when set to -1 (see the paper).')
+    parser.add_argument('--max-gibbs-lambda', type=str2bool, default=False , help='Use max tempretaure for the Gibbs distribution. Default is False.')
     # inference - data-dependent prior
     parser.add_argument('--nominal-prior', type=str2bool, default=False, help='Center the prior at a controller learned from nominal noise-free initial conditions. Default is False.')
+    parser.add_argument('--nominal-prior-std-scale', type=float, default=50, help='Scaling for the std of the nominal prior. Default is 50.')
     parser.add_argument('--data-dep-prior', type=str2bool, default=False, help='Learn the prior from a subset of data. Default is False.')
     parser.add_argument('--num-rollouts-prior', type=int, default=0, help='Number of rollouts used for training the prior.')
 
@@ -91,8 +96,17 @@ def argument_parser():
 
     assert not (args.base_is_prior and args.base_center_emp)
 
-    if args.gibbs_lambda is None:
+    if args.gibbs_lambda == -1:
         args.gibbs_lambda = (8*args.num_rollouts*math.log(1/args.delta))**0.5
+
+    # max lambda
+    if args.max_gibbs_lambda:
+        thresh_eps_lambda = 0.2
+        num_prior_samples = 10**6
+        args.gibbs_lambda = get_max_lambda(
+            thresh=thresh_eps_lambda, delta=args.delta, n_p=num_prior_samples, 
+            init_condition=20, loss_bound=args.loss_bound
+        )    #TODO
 
     # assertions and warning
     if not args.col_av:
@@ -168,7 +182,10 @@ def print_args(args, method='empirical'):
         msg += 'based on nominal controllers trained from noise-free initial conditions with different random seeds'
     else:
         msg += 'centered at zero -- prior std: %.2e' % args.prior_std
+    
     msg += '\n[INFO] Gibbs: delta: %.2e' % args.delta + ' -- gibbs_lambda: %.2f' % args.gibbs_lambda
+    if args.max_gibbs_lambda:
+        msg += ' (max lambda)'
 
     # arguments for normflow:
     if method=='normflow':

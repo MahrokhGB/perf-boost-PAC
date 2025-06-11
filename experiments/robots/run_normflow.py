@@ -16,7 +16,6 @@ from controllers import PerfBoostController, AffineController, NNController
 from loss_functions import RobotsLossMultiBatch
 from utils.assistive_functions import WrapLogger
 from inference_algs.distributions import GibbsPosterior
-from ub_ub.ub_utils import get_max_lambda
 from inference_algs.normflow_assist.mynf import NormalizingFlow
 from inference_algs.normflow_assist import GibbsWrapperNF
 
@@ -33,10 +32,7 @@ def train_normflow(args, logger, save_folder):
     while not save_path.endswith('saved_results'):
         save_path = str(Path(save_path).parent.absolute())
 
-
-    STD_SCALE = 0.1         # scales the std of the base dist #TODO
-    if args.base_is_prior:
-        BASE_STDP_SCALE = 1/args.nominal_prior_std_scale/100 # TODO
+    BASE_STD_SCALE = 1/args.nominal_prior_std_scale/100 # TODO
 
     # ------------ 1. Dataset ------------
     dataset = RobotsDataset(random_seed=args.random_seed, horizon=args.horizon, std_ini=args.std_init_plant, n_agents=2)
@@ -158,8 +154,8 @@ def train_normflow(args, logger, save_folder):
 
     # ------------ 6. Posterior ------------
     # use max lambda s.t. eps/lambda <= thresh
-    thresh_eps_lambda = 0.2
-    num_prior_samples = 10**6
+    # thresh_eps_lambda = 0.2
+    # num_prior_samples = 10**6
     # lambda_max_eps = 1000
     # lambda_max_eps = get_max_lambda(thresh=thresh_eps_lambda, delta=args.delta, n_p=num_prior_samples, init_condition=20, loss_bound=args.loss_bound)    #TODO
     # logger.info('lambda_max_eps = '+str(lambda_max_eps))
@@ -179,7 +175,6 @@ def train_normflow(args, logger, save_folder):
         target_dist=gibbs_posteior, train_dataloader=train_dataloader,
         prop_scale=torch.tensor(6.0), prop_shift=torch.tensor(-3.0)
     )
-    tmp = gibbs_posteior.prior.sample(torch.Size([100,]))
 
     # ------------ 7. save setup ------------
     setup_dict = vars(args)
@@ -187,6 +182,7 @@ def train_normflow(args, logger, save_folder):
     setup_dict['loss_bound'] = args.loss_bound
     setup_dict['prior_dict'] = prior_dict
     setup_dict['gibbs_lambda'] = gibbs_posteior.lambda_
+    setup_dict['base_std_scale'] = BASE_STD_SCALE
     torch.save(setup_dict, os.path.join(save_folder, 'setup'))
 
     # ------------ 8. NormFlows ------------
@@ -194,7 +190,7 @@ def train_normflow(args, logger, save_folder):
     num_samples_nf_eval = num_samples_nf_train 
 
     flows = []
-    for i in range(args.num_flows):
+    for _ in range(args.num_flows):
         if args.flow_type == 'Radial':
             flows += [nf.flows.Radial((num_params,), act=args.flow_activation)]
         elif args.flow_type == 'Planar': # f(z) = z + u * h(w * z + b)
@@ -223,10 +219,10 @@ def train_normflow(args, logger, save_folder):
     q0 = nf.distributions.DiagGaussian(num_params, trainable=args.learn_base)
     # base distribution same as the prior
     if args.base_is_prior:
-        logger.info('[INFO] Base distribution is similar to the prior, with std scaled by %.4f.' % BASE_STDP_SCALE)
+        logger.info('[INFO] Base distribution is similar to the prior, with std scaled by %.4f.' % BASE_STD_SCALE)
         state_dict = q0.state_dict()
         state_dict['loc'] = gibbs_posteior.prior.mean().reshape(1, -1)
-        state_dict['log_scale'] = torch.log(gibbs_posteior.prior.stddev().reshape(1, -1)*BASE_STDP_SCALE) 
+        state_dict['log_scale'] = torch.log(gibbs_posteior.prior.stddev().reshape(1, -1)*BASE_STD_SCALE) 
         q0.load_state_dict(state_dict)
     # base distribution centered at the empirical or nominal controller
     elif args.base_center_emp or args.base_center_nominal:
@@ -254,11 +250,12 @@ def train_normflow(args, logger, save_folder):
         state_dict['loc'] = torch.Tensor(mean.reshape(1, -1))
         # set the scale of the base distribution
         # state_dict['log_scale'] = state_dict['log_scale'] - 100 # TODO
-        state_dict['log_scale'] = torch.log(torch.abs(state_dict['loc'])*STD_SCALE) # TODO
+        state_dict['log_scale'] = torch.log(torch.abs(state_dict['loc'])*BASE_STD_SCALE)
         q0.load_state_dict(state_dict)
     else:
         state_dict = q0.state_dict()
-        state_dict['log_scale'] = torch.log(torch.abs(state_dict['loc'])*STD_SCALE) # TODO
+        state_dict['log_scale'] = torch.log(torch.abs(state_dict['loc'])*BASE_STD_SCALE)
+        q0.load_state_dict(state_dict)
 
     # set up normflow
     nfm = NormalizingFlow(q0=q0, flows=flows, p=target) # NOTE: set back to nf.NormalizingFlow

@@ -30,11 +30,14 @@ class CostumDataset(Dataset):
         assert data.shape[0]==num_samples
         return data
 
-    def get_data(self, num_train_samples=1024, num_test_samples=1024):
+    def get_data(self, num_train_samples=8192, num_test_samples=8192):
         '''
         Main function to get train and test datasets. No need to modify.
         '''
         self._load_data()
+        # generate data if not enough samples are saved
+        if num_train_samples+num_test_samples>self._data['train_data_full'].shape[0]:
+            self._generate_data(num_samples=num_train_samples+num_test_samples)
         train_data = self._data['train_data_full'][0:num_train_samples, :, :]
         test_data = self._data['test_data'][0:num_test_samples, :, :]
         return train_data, test_data
@@ -44,8 +47,8 @@ class CostumDataset(Dataset):
         '''
         No need to change. Generates and saves train and test datasets.
         '''
-        train_data_full = self._generate_data(1024)
-        test_data = self._generate_data(1024)
+        train_data_full = self._generate_data(8192)
+        test_data = self._generate_data(8192)
         # save
         filehandler = open(self.file_name, 'wb')
         pickle.dump({'train_data_full': train_data_full.detach().cpu(),
