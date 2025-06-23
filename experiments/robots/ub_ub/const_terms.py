@@ -32,7 +32,7 @@ logger = WrapLogger(logger)
 logger.info('---------- Upper bound constants ----------\n')
 logger.info(msg)
 torch.manual_seed(args.random_seed)
-num_prior_samples = 10**6   # TODO: move to arg parser
+num_prior_samples = 10**12   # TODO: move to arg parser
 
 # ------------ 1. Basics ------------
 # Dataset
@@ -40,8 +40,6 @@ dataset = RobotsDataset(random_seed=args.random_seed, horizon=args.horizon, std_
 # divide to train and test
 train_data_full, test_data = dataset.get_data(num_train_samples=args.num_rollouts, num_test_samples=500)
 train_data_full, test_data = train_data_full.to(device), test_data.to(device)
-print('train_data_full', train_data_full.shape)
-exit()
 # data for plots
 t_ext = args.horizon * 4
 plot_data = torch.zeros(1, t_ext, train_data_full.shape[-1], device=device)
@@ -88,9 +86,10 @@ C = bounded_loss_fn.loss_bound
 # ------------ 2. Range for num_rollouts_prior ------------
 # lambda_range = np.linspace(args.gibbs_lambda/10, args.gibbs_lambda*10, 20)
 lambda_range = np.logspace(
-    np.log(args.gibbs_lambda/10), min(np.log(args.gibbs_lambda*10), np.log(500)), 
+    np.log(args.gibbs_lambda/100), min(np.log(args.gibbs_lambda*10), np.log(500)), 
     20, base=np.e
 )
+lambda_range = np.round(lambda_range, decimals=4)
 mcdim_terms = dict.fromkeys(
     ['gibbs_lambda', 'num_rollouts_Q', 'lambda_Q', 'epsilon/lambda_', 'ub_const', 'tot_const'],
 )
@@ -106,8 +105,7 @@ for gibbs_lambda in lambda_range:
 
     # compute epsilon/lambda + ub_const for different lambda_Q
     for Q_ind in range(len(num_rollouts_Q)):
-        # print(num_rollouts_P[Q_ind])
-        mcdim_terms['gibbs_lambda'][ind] = gibbs_lambda #np.round(gibbs_lambda, decimals=2)
+        mcdim_terms['gibbs_lambda'][ind] = gibbs_lambda
         mcdim_terms['lambda_Q'][ind] = lambdas_Q[Q_ind]
         mcdim_terms['num_rollouts_Q'][ind] = num_rollouts_Q[Q_ind]
         mcdim_ub = get_mcdim_ub(
@@ -152,8 +150,23 @@ plt.tight_layout()
 plt.savefig(os.path.join(
     save_folder, 'const_terms.png'))
 
+
+min_ind = mcdim_terms['tot_const'].index(min(mcdim_terms['tot_const']))
+logger.info(
+    '\n\nbest pair:' +
+    '\ngibbs_lambda = ' + str(mcdim_terms['gibbs_lambda'][min_ind])+ 
+    '\nnum_rollouts_Q = ' + str(mcdim_terms['num_rollouts_Q'][min_ind])+ 
+    '\nlambda_Q = ' + str(mcdim_terms['lambda_Q'][min_ind])+
+    '\nepsilon/lambda_ = ' + str(mcdim_terms['epsilon/lambda_'][min_ind])+
+    '\nub_const = ' + str(mcdim_terms['ub_const'][min_ind])+
+    '\ntot_const = ' + str(mcdim_terms['tot_const'][min_ind])
+)
+
+
 filtered_pairs = []
-thresh = 0.5
+closest_to_lambda_star = (1e6, None, None)
+thresh = mcdim_terms['tot_const'][min_ind]*1.01
+logger.info('\n\nfiltered pairs')
 for ind in range(len(mcdim_terms['tot_const'])):
     if mcdim_terms['tot_const'][ind] <= thresh:
         filtered_pairs += (
@@ -161,17 +174,17 @@ for ind in range(len(mcdim_terms['tot_const'])):
             mcdim_terms['num_rollouts_Q'][ind], 
             mcdim_terms['tot_const'][ind]
         )
+        if abs(args.gibbs_lambda-closest_to_lambda_star[0]) > abs(args.gibbs_lambda-mcdim_terms['gibbs_lambda'][ind]):
+            closest_to_lambda_star = (
+                mcdim_terms['gibbs_lambda'][ind], 
+                mcdim_terms['num_rollouts_Q'][ind], 
+                mcdim_terms['tot_const'][ind]
+            )
+        logger.info('\n'+
+            'gibbs_lambda = ' + str(mcdim_terms['gibbs_lambda'][ind])+ 
+            ', num_rollouts_Q = ' + str(mcdim_terms['num_rollouts_Q'][ind])+ 
+            ', tot_const = ' + str(mcdim_terms['tot_const'][ind])
+        )
 
-# print(filtered_pairs)
-
-min_ind = mcdim_terms['tot_const'].index(min(mcdim_terms['tot_const']))
-print('best pair:')
-print(
-    '\nmin_ind', min_ind, 
-    '\ngibbs_lambda', mcdim_terms['gibbs_lambda'][min_ind], 
-    '\nnum_rollouts_Q', mcdim_terms['num_rollouts_Q'][min_ind], 
-    '\nlambda_Q', mcdim_terms['lambda_Q'][min_ind], 
-    '\ntot_const', mcdim_terms['tot_const'][min_ind],
-    '\nepsilon/lambda_', mcdim_terms['epsilon/lambda_'][min_ind],
-    '\nub_const', mcdim_terms['ub_const'][min_ind]
-)
+logger.info('\n\nthe pair with the closest lambda to lambda_* is ')
+logger.info(closest_to_lambda_star)

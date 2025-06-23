@@ -1,5 +1,9 @@
-import argparse, math
-from ub_utils import get_max_lambda
+import argparse, math, sys, os
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(1, BASE_DIR)
+
+from ub_ub.ub_utils import get_max_lambda
 
 # argument parser
 def argument_parser():

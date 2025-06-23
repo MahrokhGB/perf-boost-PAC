@@ -144,14 +144,11 @@ def get_epsilon(num_prior_samples, delta, lambda_, loss_bound=1):
         exp_lambda_c = math.exp(lambda_*loss_bound)
         return term1 * math.log(1+(exp_lambda_c-1)/num_prior_samples)
     except:
-        print(lambda_)
         # first-order Taylor approximation: term1 * (exp_lambda_c-1)/num_prior_samples
         # if exp_lambda_c is too large, can further approximate as 
         # term1 * exp_lambda_c / num_prior_samples, or equivalently, as follows:
         # only valid if (exp_lambda_c-1)/num_prior_samples is very small.
         print('\n[INFO] compute epsilon in the upper bound using first-order Taylor expansion.')
-        print('lambda_', lambda_, 'loss_bound', loss_bound, 'math.log(num_prior_samples)', math.log(num_prior_samples))
-        print('lambda_*loss_bound - math.log(num_prior_samples)', lambda_*loss_bound - math.log(num_prior_samples))
         return term1 * math.exp(lambda_*loss_bound - math.log(num_prior_samples))
 
 
@@ -178,10 +175,6 @@ def get_mcdim_ub(
 
     # constant term
     if 'ub_const' in return_keys:
-        if lambda_<1e-3:
-            print('lambda_', lambda_)
-        if num_rollouts<1e-3:
-            print('num_rollouts', num_rollouts)
         ub_const = 1/lambda_*math.log(1/delta) + lambda_*C**2/8/num_rollouts
     else:
         ub_const = torch.Tensor([0])

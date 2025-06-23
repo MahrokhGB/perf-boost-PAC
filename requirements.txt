@@ -1,0 +1,11 @@
+control==0.10.1
+matplotlib==3.10.3
+normflows==1.7.3
+numpy
+optuna==4.4.0
+pandas==2.3.0
+pyro-ppl
+scipy==1.15.3
+seaborn==0.13.2
+setuptools==75.8.0
+tqdm==4.67.1

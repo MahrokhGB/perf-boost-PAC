@@ -27,32 +27,15 @@ def objective(trial):
         )
         res_dict, _ = train_svgd(args, logger, save_folder)
     elif method=='normflow':
-        if args.max_gibbs_lambda:
-            args.planar_flow_scale = trial.suggest_float(
-                'planar_flow_scale', args.planar_flow_scale/10, args.planar_flow_scale*10, log=True
-            )
-            args.nominal_prior_std_scale = trial.suggest_float(
-                'nominal_prior_std_scale', args.nominal_prior_std_scale/10, args.nominal_prior_std_scale*10, log=True
-            )
-            args.prior_std = trial.suggest_float(
-                'prior_std', args.prior_std/10, args.prior_std*10, log=True
-            )
-        else: 
-            args.planar_flow_scale = trial.suggest_float(
-                'planar_flow_scale', args.planar_flow_scale/10, args.planar_flow_scale*10, log=True
-            )
-            args.nominal_prior_std_scale = trial.suggest_float(
-                'nominal_prior_std_scale', args.nominal_prior_std_scale/10, args.nominal_prior_std_scale*10, log=True
-            )
-            # args.prior_std = trial.suggest_float(
-            #     'prior_std', args.prior_std/10, args.prior_std*10, log=True
-            # )
-            # args.gibbs_lambda = trial.suggest_float(
-            #     'gibbs_lambda', args.gibbs_lambda/10, args.gibbs_lambda*10, log=True
-            # )
-            # use best results from SVGD
-            args.prior_std = 2.8257495793293894
-            args.gibbs_lambda = 9.515015854816593
+        # args.planar_flow_scale = trial.suggest_float(
+        #     'planar_flow_scale', args.planar_flow_scale/10, args.planar_flow_scale*10, log=True
+        # )
+        args.nominal_prior_std_scale = trial.suggest_float(
+            'nominal_prior_std_scale', args.nominal_prior_std_scale/10, args.nominal_prior_std_scale*10, log=True
+        )
+        args.prior_std = trial.suggest_float(
+            'prior_std', args.prior_std/10, args.prior_std*10, log=True
+        )
 
         res_dict, _ = train_normflow(args, logger, save_folder)
 
@@ -64,7 +47,7 @@ print(BASE_DIR)
 sys.path.insert(1, BASE_DIR)
 
 # ----- SET UP LOGGER -----
-method = 'SVGD'
+method = 'normflow'     # TODO: move to arg parser
 now = datetime.now().strftime("%m_%d_%H_%M_%S")
 save_path = os.path.join(BASE_DIR, 'experiments', 'robots', 'saved_results', 'hyper_param_tuning')
 save_folder = os.path.join(save_path, method+'_'+now)
