@@ -8,7 +8,8 @@ from ub_ub.ub_utils import get_max_lambda
 # argument parser
 def argument_parser():
     parser = argparse.ArgumentParser(description="Training ren for learning contractive motion through imitation.")
-
+    parser.add_argument('--saved-results-path', type=str, default='', help='Controller type. Can be Affine, NN, or PerfBoost. Default is Affine.')
+    
     # experiment
     parser.add_argument('--random-seed', type=int, default=5, help='Random seed. Default is 5.')
     parser.add_argument('--col-av', type=str2bool, default=True, help='Avoid collisions. Default is True.')

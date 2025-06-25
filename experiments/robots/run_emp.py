@@ -256,11 +256,15 @@ if __name__=='__main__':
     # ----- parse and set experiment arguments -----
     args = argument_parser()
     # ----- SET UP LOGGER -----
+    if not args.saved_results=='':
+        saved_results_path = args.saved_results 
+    else:
+        saved_results_path = os.path.join(BASE_DIR, 'experiments', 'robots', 'saved_results')
     now = datetime.now().strftime("%m_%d_%H_%M_%S")
     if args.nominal_exp:
-        save_path = os.path.join(BASE_DIR, 'experiments', 'robots', 'saved_results', 'nominal')
+        save_path = os.path.join(saved_results_path, 'nominal')
     else:
-        save_path = os.path.join(BASE_DIR, 'experiments', 'robots', 'saved_results', 'empirical')
+        save_path = os.path.join(saved_results_path, 'empirical')
     save_folder = os.path.join(save_path, args.cont_type+'_'+now)
     os.makedirs(save_folder)
     logging.basicConfig(filename=os.path.join(save_folder, 'log'), format='%(asctime)s %(message)s', filemode='w')
