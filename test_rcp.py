@@ -125,6 +125,7 @@ import argparse
 
 
 def main():
+    print('start')
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--text", default="hello world")
