@@ -80,6 +80,10 @@ def argument_parser():
     parser.add_argument('--data-dep-prior', type=str2bool, default=False, help='Learn the prior from a subset of data. Default is False.')
     parser.add_argument('--num-rollouts-prior', type=int, default=0, help='Number of rollouts used for training the prior.')
 
+    # hyper-parameter optimization
+    parser.add_argument('--optuna-n-trials', type=int, default=10, help='Number of trials used for hyperparameter optimization with Optuna. Default is 10.')
+    parser.add_argument('--optuna-search-scale', type=float, default=10, help='Set search space for hyperparameter optimization with Optuna to [nominal/scale, nominal*scale]. Default is 10.')
+    
 
     args = parser.parse_args()
 
@@ -149,6 +153,7 @@ def argument_parser():
             print('Warning: nominal_exp is set to True, but batch_size>1. Only one rollout is used for training.')
             args.batch_size = 1
 
+    assert args.optuna_search_scale > 1, 'optuna search scale must be larger than 1.'
 
     return args
 

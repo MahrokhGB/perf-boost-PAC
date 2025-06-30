@@ -7,36 +7,84 @@ from run_SVGD import train_svgd
 from run_normflow import train_normflow
 from utils.assistive_functions import WrapLogger
 
-def objective(trial):
-    # ----- parse and set experiment arguments -----
-    args = argument_parser()
-
-    # Hyperparameters to tune
+def define_tunables(args):
+    """Set tunable hyperparameters for the experiment."""
     # hidden_size = trial.suggest_int('hidden_size', 128, 512)
-    # args.lr = trial.suggest_float('lr', args.lr/10, args.lr*10, log=True)
-    
+    # args.lr = trial.suggest_float('lr', args.lr/args.optuna_search_scale, args.lr*args.optuna_search_scale, log=True)
     if method=='empirical':
-        args.cont_init_std = trial.suggest_float('cont_init_std', 1e-3, 1, log=True)
+        tunables = [
+            {
+                'name':'cont_init_std',
+                'nominal':args.cont_init_std,
+                'min':1e-3, 
+                'max':1, 
+                'log_scale':True
+            }
+        ]
+    elif method=='SVGD':
+        tunables = [
+            {
+                'name':'prior_std',
+                'nominal':args.prior_std,
+                'min':args.prior_std/args.optuna_search_scale, 
+                'max':args.prior_std*args.optuna_search_scale, 
+                'log_scale':True
+            },
+            {
+                'name':'gibbs_lambda',
+                'nominal':args.gibbs_lambda,
+                'min':args.gibbs_lambda/args.optuna_search_scale,
+                'max':args.gibbs_lambda*args.optuna_search_scale,
+                'log_scale':True
+            }
+        ]
+    elif method=='normflow':
+        tunables = [
+            # {
+            #     'name':'planar_flow_scale',
+            #     'nominal':args.planar_flow_scale,
+            #     'min':args.planar_flow_scale/args.optuna_search_scale,
+            #     'max':args.planar_flow_scale*args.optuna_search_scale,
+            #     'log_scale':True
+            # },
+            {
+                'name':'nominal_prior_std_scale',
+                'nominal':args.nominal_prior_std_scale,
+                'min':args.nominal_prior_std_scale/args.optuna_search_scale,
+                'max':args.nominal_prior_std_scale*args.optuna_search_scale,
+                'log_scale':True
+                },
+            {
+                'name':'prior_std',
+                'nominal':args.prior_std,
+                'min':args.prior_std/args.optuna_search_scale,
+                'max':args.prior_std*args.optuna_search_scale,
+                'log_scale':True
+            }
+        ]
+    else:
+        raise ValueError("Method not recognized. Choose from 'empirical', 'SVGD', or 'normflow'.")
+    
+    return tunables
+
+    
+    
+def objective(trial):
+    # change tunable args to optuna format
+    for tunable in tunables:
+        setattr(args, tunable['name'], trial.suggest_float(
+            tunable['name'], 
+            tunable['min'], 
+            tunable['max'], 
+            log=tunable.get('log_scale', False)
+        ))
+    
+    # get training loss
+    if method=='empirical':
         res_dict, _ = train_emp(args, logger, save_folder)
     elif method=='SVGD':
-        args.prior_std = trial.suggest_float(
-            'prior_std', args.prior_std/10, args.prior_std*10, log=True
-        )
-        args.gibbs_lambda = trial.suggest_float(
-            'gibbs_lambda', args.gibbs_lambda/10, args.gibbs_lambda*10, log=True
-        )
         res_dict, _ = train_svgd(args, logger, save_folder)
     elif method=='normflow':
-        # args.planar_flow_scale = trial.suggest_float(
-        #     'planar_flow_scale', args.planar_flow_scale/10, args.planar_flow_scale*10, log=True
-        # )
-        args.nominal_prior_std_scale = trial.suggest_float(
-            'nominal_prior_std_scale', args.nominal_prior_std_scale/10, args.nominal_prior_std_scale*10, log=True
-        )
-        args.prior_std = trial.suggest_float(
-            'prior_std', args.prior_std/10, args.prior_std*10, log=True
-        )
-
         res_dict, _ = train_normflow(args, logger, save_folder)
 
     return res_dict['train_loss']
@@ -57,11 +105,24 @@ logger = logging.getLogger('perf_boost_')
 logger.setLevel(logging.DEBUG)
 logger = WrapLogger(logger)
 
+# ----- parse and set experiment arguments -----
+args = argument_parser()
+    
 optuna.logging.disable_default_handler()  # Disable the default handler.
 optuna.logging.enable_propagation()  # Propagate logs to the root logger.
+
+# define the tunables based on the method
+tunables = define_tunables(args)
+
 # ----- START OPTUNA STUDY -----
 logger.info("Starting Hyperparameter Optimization with Optuna")
 study = optuna.create_study(direction='minimize')
-study.optimize(objective, n_trials=10)
+# Define the nominal trial
+nominal_trail = {}
+for tunable in tunables:
+    nominal_trail[tunable['name']] = tunable['nominal']
+study.enqueue_trial(nominal_trail)
+# Optimize the study with the objective function
+study.optimize(objective, n_trials=args.optuna_n_trials)
 logger.info("Best Hyperparameters:")
 logger.info(study.best_params)
