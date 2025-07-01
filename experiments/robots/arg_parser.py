@@ -83,6 +83,7 @@ def argument_parser():
     # hyper-parameter optimization
     parser.add_argument('--optuna-n-trials', type=int, default=10, help='Number of trials used for hyperparameter optimization with Optuna. Default is 10.')
     parser.add_argument('--optuna-search-scale', type=float, default=10, help='Set search space for hyperparameter optimization with Optuna to [nominal/scale, nominal*scale]. Default is 10.')
+    parser.add_argument('--optuna-training-method', type=str, default=None, help='Training method for which hyperparameter optimization is performed. Can be empirical, normflow, or SVGD.')
     
 
     args = parser.parse_args()
@@ -153,7 +154,10 @@ def argument_parser():
             print('Warning: nominal_exp is set to True, but batch_size>1. Only one rollout is used for training.')
             args.batch_size = 1
 
+    # optuna 
     assert args.optuna_search_scale > 1, 'optuna search scale must be larger than 1.'
+    assert args.optuna_training_method in ['empirical', 'normflow', 'SVGD'], \
+        "optuna_training_method must be one of 'empirical', 'normflow', or 'SVGD'."
 
     return args
 

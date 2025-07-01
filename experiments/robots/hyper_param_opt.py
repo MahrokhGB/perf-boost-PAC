@@ -94,8 +94,11 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 print(BASE_DIR)
 sys.path.insert(1, BASE_DIR)
 
+# ----- parse and set experiment arguments -----
+args = argument_parser()
+
 # ----- SET UP LOGGER -----
-method = 'normflow'     # TODO: move to arg parser
+method = args.optuna_training_method
 now = datetime.now().strftime("%m_%d_%H_%M_%S")
 save_path = os.path.join(BASE_DIR, 'experiments', 'robots', 'saved_results', 'hyper_param_tuning')
 save_folder = os.path.join(save_path, method+'_'+now)
@@ -104,9 +107,6 @@ logging.basicConfig(filename=os.path.join(save_folder, 'log'), format='%(asctime
 logger = logging.getLogger('perf_boost_')
 logger.setLevel(logging.DEBUG)
 logger = WrapLogger(logger)
-
-# ----- parse and set experiment arguments -----
-args = argument_parser()
     
 optuna.logging.disable_default_handler()  # Disable the default handler.
 optuna.logging.enable_propagation()  # Propagate logs to the root logger.
