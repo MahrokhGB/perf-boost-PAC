@@ -225,21 +225,17 @@ def train_normflow(args, logger, save_folder):
         state_dict['log_scale'] = torch.log(gibbs_posteior.prior.stddev().reshape(1, -1)*BASE_STD_SCALE) 
         q0.load_state_dict(state_dict)
     # base distribution centered at the empirical or nominal controller
-    elif args.base_center_emp or args.base_center_nominal:
+    elif args.base_center_emp:
         # get filename to load
-        if args.base_center_emp:
-            if args.dim_nl==1 and args.dim_internal==1:
-                filename_load = os.path.join(save_path, 'empirical', 'PerfBoost_08_29_14_58_13', 'trained_controller.pt')
-            elif args.dim_nl==2 and args.dim_internal==4:
-                filename_load = os.path.join(save_path, 'empirical', 'PerfBoost_08_29_14_57_38', 'trained_controller.pt')
-            elif args.dim_nl==8 and args.dim_internal==8:
-                # # empirical controller avoids collisions
-                # filename_load = os.path.join(save_path, 'empirical', 'PerfBoost_01_14_16_26_11', 'trained_controller.pt')
-                # empirical controller does not avoid collisions
-                filename_load = os.path.join(save_path, 'empirical', 'PerfBoost_01_19_11_31_25', 'trained_controller.pt')
-        if args.base_center_nominal:
-            if args.dim_nl==8 and args.dim_internal==8:
-                filename_load = os.path.join(save_path, 'nominal', 'PerfBoost_01_22_15_25_52', 'trained_controller.pt')
+        if args.dim_nl==1 and args.dim_internal==1:
+            filename_load = os.path.join(save_path, 'empirical', 'PerfBoost_08_29_14_58_13', 'trained_controller.pt')
+        elif args.dim_nl==2 and args.dim_internal==4:
+            filename_load = os.path.join(save_path, 'empirical', 'PerfBoost_08_29_14_57_38', 'trained_controller.pt')
+        elif args.dim_nl==8 and args.dim_internal==8:
+            # # empirical controller avoids collisions
+            # filename_load = os.path.join(save_path, 'empirical', 'PerfBoost_01_14_16_26_11', 'trained_controller.pt')
+            # empirical controller does not avoid collisions
+            filename_load = os.path.join(save_path, 'empirical', 'PerfBoost_01_19_11_31_25', 'trained_controller.pt')
         # load the controller
         res_dict_loaded = torch.load(filename_load)
         # set the mean of the base distribution to the controller

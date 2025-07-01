@@ -256,8 +256,8 @@ if __name__=='__main__':
     # ----- parse and set experiment arguments -----
     args = argument_parser()
     # ----- SET UP LOGGER -----
-    if not args.saved_results=='':
-        saved_results_path = args.saved_results 
+    if not args.saved_results_path=='':
+        saved_results_path = args.saved_results_path 
     else:
         saved_results_path = os.path.join(BASE_DIR, 'experiments', 'robots', 'saved_results')
     now = datetime.now().strftime("%m_%d_%H_%M_%S")
