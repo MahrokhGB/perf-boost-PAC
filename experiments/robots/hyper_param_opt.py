@@ -30,13 +30,13 @@ def define_tunables(args):
                 'max':args.prior_std*args.optuna_search_scale, 
                 'log_scale':True
             },
-            {
-                'name':'gibbs_lambda',
-                'nominal':args.gibbs_lambda,
-                'min':args.gibbs_lambda/args.optuna_search_scale,
-                'max':args.gibbs_lambda*args.optuna_search_scale,
-                'log_scale':True
-            }
+            # {
+            #     'name':'gibbs_lambda',
+            #     'nominal':args.gibbs_lambda,
+            #     'min':args.gibbs_lambda/args.optuna_search_scale,
+            #     'max':args.gibbs_lambda*args.optuna_search_scale,
+            #     'log_scale':True
+            # }
         ]
     elif method=='normflow':
         tunables = [
