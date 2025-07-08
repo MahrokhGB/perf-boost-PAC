@@ -99,6 +99,8 @@ args = argument_parser()
 
 # ----- SET UP LOGGER -----
 method = args.optuna_training_method
+assert not method is None
+
 now = datetime.now().strftime("%m_%d_%H_%M_%S")
 save_path = os.path.join(BASE_DIR, 'experiments', 'robots', 'saved_results', 'hyper_param_tuning')
 save_folder = os.path.join(save_path, method+'_'+now)

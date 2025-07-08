@@ -156,8 +156,9 @@ def argument_parser():
 
     # optuna 
     assert args.optuna_search_scale > 1, 'optuna search scale must be larger than 1.'
-    assert args.optuna_training_method in ['empirical', 'normflow', 'SVGD'], \
-        "optuna_training_method must be one of 'empirical', 'normflow', or 'SVGD'."
+    if not args.optuna_training_method is None:
+        assert args.optuna_training_method in ['empirical', 'normflow', 'SVGD'], \
+            "optuna_training_method must be one of 'empirical', 'normflow', or 'SVGD'."
 
     return args
 
