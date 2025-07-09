@@ -29,7 +29,7 @@ RUN apt update
 RUN apt install python3-pip -y
 
 # Install additional dependencies
-# RUN pip install -r requirements.txt
+RUN pip install -r /home/${LDAP_USERNAME}/requirements.txt
 # RUN python -m pip install --upgrade pip && python -m pip install -r requirements.txt
 
 # Set the working directory in your user's home

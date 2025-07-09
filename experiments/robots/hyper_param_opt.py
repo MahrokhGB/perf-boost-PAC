@@ -22,22 +22,33 @@ def define_tunables(args):
             }
         ]
     elif method=='SVGD':
-        tunables = [
-            {
-                'name':'prior_std',
-                'nominal':args.prior_std,
-                'min':args.prior_std/args.optuna_search_scale, 
-                'max':args.prior_std*args.optuna_search_scale, 
-                'log_scale':True
-            },
-            # {
-            #     'name':'gibbs_lambda',
-            #     'nominal':args.gibbs_lambda,
-            #     'min':args.gibbs_lambda/args.optuna_search_scale,
-            #     'max':args.gibbs_lambda*args.optuna_search_scale,
-            #     'log_scale':True
-            # }
-        ]
+        if not args.nominal_prior:
+            tunables = [
+                {
+                    'name':'prior_std',
+                    'nominal':args.prior_std,
+                    'min':args.prior_std/args.optuna_search_scale, 
+                    'max':args.prior_std*args.optuna_search_scale, 
+                    'log_scale':True
+                },
+            ]
+        else:
+            tunables = [
+                {
+                    'name':'nominal_prior_std_scale',
+                    'nominal':args.nominal_prior_std_scale,
+                    'min':args.nominal_prior_std_scale/args.optuna_search_scale,
+                    'max':args.nominal_prior_std_scale*args.optuna_search_scale,
+                    'log_scale':True
+                }
+            ]
+        # tunables +=[{
+                #     'name':'gibbs_lambda',
+                #     'nominal':args.gibbs_lambda,
+                #     'min':args.gibbs_lambda/args.optuna_search_scale,
+                #     'max':args.gibbs_lambda*args.optuna_search_scale,
+                #     'log_scale':True
+                # }]
     elif method=='normflow':
         tunables = [
             # {
