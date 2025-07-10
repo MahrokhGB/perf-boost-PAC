@@ -141,12 +141,11 @@ def train_svgd(args, logger, save_folder):
                 prior_dict[name+'_loc'] = res_dict_loaded[name]
                 prior_dict[name+'_scale'] = args.prior_std
             elif args.nominal_prior:
-                PRIOR_STDP_SCALE = 50 # TODO
-                logger.info('[INFO] Prior distribution is the distribution over nominal controllers, with std scaled by %.4f.' % PRIOR_STDP_SCALE)
+                logger.info('[INFO] Prior distribution is the distribution over nominal controllers, with std scaled by %.4f.' % args.nominal_prior_std_scale)
                 vals = torch.stack([res[name] for res in res_dict_loaded], dim=0)
                 # val and std computed elementwise. same shape as the training param
                 prior_dict[name+'_loc'] = vals.mean(dim=0)  
-                prior_dict[name+'_scale'] = vals.std(dim=0, correction=1) * PRIOR_STDP_SCALE
+                prior_dict[name+'_scale'] = vals.std(dim=0, correction=1) * args.nominal_prior_std_scale
             else:
                 prior_dict[name+'_loc'] = 0
                 prior_dict[name+'_scale'] = args.prior_std

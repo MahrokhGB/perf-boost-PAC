@@ -194,7 +194,8 @@ def print_args(args, method='empirical'):
         msg += 'learned from data using %i rollouts' % args.num_rollouts_prior    
         msg +=  '-- prior std: %.2e' % args.prior_std 
     elif args.nominal_prior: 
-        msg += 'based on nominal controllers trained from noise-free initial conditions with different random seeds'
+        msg += 'based on nominal controllers trained from noise-free initial conditions with different random seeds.'
+        msg += ' -- nominal prior std is scaled by: %.2f' % args.nominal_prior_std_scale
     else:
         msg += 'centered at zero -- prior std: %.2e' % args.prior_std
     
