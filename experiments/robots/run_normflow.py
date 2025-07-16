@@ -103,13 +103,13 @@ def train_normflow(args, logger, save_folder):
         min_dist=args.min_dist if args.col_av else None,
         n_agents=sys.n_agents if args.col_av else None,
     )
-    original_loss_fn = RobotsLossMultiBatch(
-        Q=Q, alpha_u=args.alpha_u, xbar=dataset.xbar,
-        loss_bound=None, sat_bound=None,
-        alpha_col=args.alpha_col, alpha_obst=args.alpha_obst,
-        min_dist=args.min_dist if args.col_av else None,
-        n_agents=sys.n_agents if args.col_av else None,
-    )
+    # original_loss_fn = RobotsLossMultiBatch(
+    #     Q=Q, alpha_u=args.alpha_u, xbar=dataset.xbar,
+    #     loss_bound=None, sat_bound=None,
+    #     alpha_col=args.alpha_col, alpha_obst=args.alpha_obst,
+    #     min_dist=args.min_dist if args.col_av else None,
+    #     n_agents=sys.n_agents if args.col_av else None,
+    # )
 
     # ------------ 5. Prior ------------
     if args.cont_type in ['Affine', 'NN']:
@@ -260,7 +260,7 @@ def train_normflow(args, logger, save_folder):
     # ------------ 10. Train NormFlows ------------
     optimizer = torch.optim.Adam(nfm.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     res_dict, filename_save = fit_norm_flow(
-        nfm=nfm, sys=sys, ctl_generic=ctl_generic, logger=logger, loss_fn=original_loss_fn,
+        nfm=nfm, sys=sys, ctl_generic=ctl_generic, logger=logger, loss_fn=bounded_loss_fn,
         save_folder=save_folder, train_data_full=train_data, test_data=test_data, plot_data=plot_data,
         return_best=args.return_best, validation_frac=args.validation_frac,
         early_stopping=args.early_stopping, n_logs_no_change=args.n_logs_no_change, tol_percentage=args.tol_percentage,

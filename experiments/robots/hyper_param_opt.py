@@ -21,7 +21,7 @@ def define_tunables(args):
                 'log_scale':True
             }
         ]
-    elif method=='SVGD':
+    elif method in ['SVGD', 'normflow']:
         if not args.nominal_prior:
             tunables = [
                 {
@@ -49,30 +49,16 @@ def define_tunables(args):
                 #     'max':args.gibbs_lambda*args.optuna_search_scale,
                 #     'log_scale':True
                 # }]
-    elif method=='normflow':
-        tunables = [
-            # {
-            #     'name':'planar_flow_scale',
-            #     'nominal':args.planar_flow_scale,
-            #     'min':args.planar_flow_scale/args.optuna_search_scale,
-            #     'max':args.planar_flow_scale*args.optuna_search_scale,
-            #     'log_scale':True
-            # },
-            {
-                'name':'nominal_prior_std_scale',
-                'nominal':args.nominal_prior_std_scale,
-                'min':args.nominal_prior_std_scale/args.optuna_search_scale,
-                'max':args.nominal_prior_std_scale*args.optuna_search_scale,
-                'log_scale':True
-                },
-            {
-                'name':'prior_std',
-                'nominal':args.prior_std,
-                'min':args.prior_std/args.optuna_search_scale,
-                'max':args.prior_std*args.optuna_search_scale,
-                'log_scale':True
-            }
-        ]
+        # if method=='normflow':
+        #     tunables += [
+                # {
+                #     'name':'planar_flow_scale',
+                #     'nominal':args.planar_flow_scale,
+                #     'min':args.planar_flow_scale/args.optuna_search_scale,
+                #     'max':args.planar_flow_scale*args.optuna_search_scale,
+                #     'log_scale':True
+                # },
+            # ]
     else:
         raise ValueError("Method not recognized. Choose from 'empirical', 'SVGD', or 'normflow'.")
     
