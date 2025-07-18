@@ -229,13 +229,18 @@ class SVGDCont():
                         fig, axs = plt.subplots(1, 2, figsize=(10, 5))
                         axs[1].plot(valid_loss_hist[:epoch+1], label='valid loss')
                         axs[1].legend()
+                        axs[1].set_xlabel('Epoch')
+                        axs[1].set_ylabel('Loss')
                         ax = axs[0]
                     else:
                         fig, ax = plt.subplots(1, 1, figsize=(5, 5))
                     ax.plot(svgd_loss_hist[:epoch+1], label='SVGD loss')
                     ax.legend()
-                    
-                    plt.savefig(os.path.join(save_folder, 'loss.pdf'))
+                    ax.set_xlabel('Epoch')
+                    ax.set_ylabel('Loss')
+            
+                    fig.savefig(os.path.join(save_folder, 'loss.pdf'))
+                    plt.close(fig)
 
 
             # go one iter back if non-psd
