@@ -164,7 +164,7 @@ class SVGDCont():
         t = time.time()
         svgd_loss_hist = [None]*(1+epochs)
         if valid_data is not None:
-            valid_loss_hist = [None]*(1+epochs)
+            valid_loss_hist = []
 
         for epoch in range(1+epochs):
             # iterate over all data batches
@@ -193,7 +193,7 @@ class SVGDCont():
                     # evaluate on validation set
                     try:
                         valid_res = self.eval_rollouts(valid_data, loss_fn=loss_fn, count_collisions=False)
-                        valid_loss_hist[epoch] = valid_res
+                        valid_loss_hist += [valid_res]
                         message +=  ', Valid Loss: {:2.4f}'.format(valid_res)
                     except Exception as e:
                         message += '[Unhandled ERR] in eval valid rollouts:'
@@ -227,7 +227,7 @@ class SVGDCont():
                 if not save_folder is None:
                     if valid_data is not None:
                         fig, axs = plt.subplots(1, 2, figsize=(10, 5))
-                        axs[1].plot(valid_loss_hist[:epoch+1], label='valid loss')
+                        axs[1].scatter(range(len(valid_loss_hist))*log_period, valid_loss_hist, label='valid loss')
                         axs[1].legend()
                         axs[1].set_xlabel('Epoch')
                         axs[1].set_ylabel('Loss')
