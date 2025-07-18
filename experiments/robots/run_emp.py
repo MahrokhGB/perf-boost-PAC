@@ -196,8 +196,10 @@ def train_emp(args, logger, save_folder):
             controller=ctl_generic, data=train_data_full
         )   # use the entire train data, not a batch
         # evaluate losses
-        train_loss = original_loss_fn.forward(x_log, u_log)
-        msg = 'Loss: %.4f' % (train_loss)
+        original_train_loss = original_loss_fn.forward(x_log, u_log)
+        bounded_train_loss = bounded_loss_fn.forward(x_log, u_log)
+        msg = 'Original loss: %.4f' % (original_train_loss)
+        msg += ' -- Bounded loss: %.4f' % (bounded_train_loss)
     # count collisions
     if args.col_av:
         train_num_col = original_loss_fn.count_collisions(x_log)
@@ -214,8 +216,11 @@ def train_emp(args, logger, save_folder):
             controller=ctl_generic, data=test_data
         )
         # loss
-        test_loss = original_loss_fn.forward(x_log, u_log).item()
-        msg = "Loss: %.4f" % (test_loss)
+        original_test_loss = original_loss_fn.forward(x_log, u_log).item()
+        bounded_test_loss = original_loss_fn.forward(x_log, u_log).item()
+        msg = "Original loss: %.4f" % (original_test_loss)
+        msg += " -- Bounded loss: %.4f" % (bounded_test_loss)
+        
     # count collisions
     if args.col_av:
         test_num_col = original_loss_fn.count_collisions(x_log)
@@ -240,9 +245,11 @@ def train_emp(args, logger, save_folder):
     # save
     res_dict = ctl_generic.c_ren.state_dict()
     res_dict['Q'] = Q
-    res_dict['train_loss'] = train_loss.item()
+    res_dict['original_train_loss'] = original_train_loss.item()
+    res_dict['bounded_train_loss'] = bounded_train_loss.item()
     res_dict['train_num_col'] = train_num_col
-    res_dict['test_loss'] = test_loss
+    res_dict['original_test_loss'] = original_test_loss
+    res_dict['bounded_test_loss'] = bounded_test_loss
     res_dict['test_num_col'] = test_num_col
     filename = os.path.join(save_folder, 'trained_controller'+'.pt')
     torch.save(res_dict, filename)
