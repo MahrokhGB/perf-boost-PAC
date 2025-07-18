@@ -227,7 +227,7 @@ class SVGDCont():
                 if not save_folder is None:
                     if valid_data is not None:
                         fig, axs = plt.subplots(1, 2, figsize=(10, 5))
-                        axs[1].scatter(range(len(valid_loss_hist))*log_period, valid_loss_hist, label='valid loss')
+                        axs[1].scatter([i * log_period for i in range(len(valid_loss_hist))], valid_loss_hist, label='valid loss')
                         axs[1].legend()
                         axs[1].set_xlabel('Epoch')
                         axs[1].set_ylabel('Loss')
