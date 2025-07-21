@@ -217,7 +217,7 @@ def train_emp(args, logger, save_folder):
         )
         # loss
         original_test_loss = original_loss_fn.forward(x_log, u_log).item()
-        bounded_test_loss = original_loss_fn.forward(x_log, u_log).item()
+        bounded_test_loss = bounded_loss_fn.forward(x_log, u_log).item()
         msg = "Original loss: %.4f" % (original_test_loss)
         msg += " -- Bounded loss: %.4f" % (bounded_test_loss)
         
