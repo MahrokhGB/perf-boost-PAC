@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from collections import OrderedDict
 
-from controllers.non_linearities import MLP, HamiltonianSIE, CouplingLayer
+from .non_linearities import MLP, HamiltonianSIE, CouplingLayer
 
 
 class LRU(nn.Module):

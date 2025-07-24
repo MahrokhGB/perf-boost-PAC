@@ -13,16 +13,15 @@ def get_conf_interval(array, confidence=95, n_digits=2, format='plus_minus'):
     else:
         raise NotImplementedError
     if format=='plus_minus':
-        print('Confidence interval: %f +/- %f' % (
-            np.around(sample_mean, decimals=n_digits), 
-            np.around(z*sample_std/num_samples**0.5, decimals=n_digits)
-        ))
+        mean = np.around(sample_mean, decimals=n_digits)
+        error = np.around(z*sample_std/num_samples**0.5, decimals=n_digits)
+        print(f'Confidence interval: {mean:.{n_digits}f} \pm {error:.{n_digits}f}')
     else:
         l_bound = sample_mean - z*sample_std/num_samples**0.5
         u_bound = sample_mean + z*sample_std/num_samples**0.5
         l_bound = np.around(l_bound, decimals=n_digits)
         u_bound = np.around(u_bound, decimals=n_digits)
-        print('Confidence interval: [%f, %f]' % (l_bound, u_bound))
+        print(f'Confidence interval: [{l_bound:.{n_digits}f}, {u_bound:.{n_digits}f}]')
 
 # Example
 # array = np.array([27, 62, 25, 29, 8])
