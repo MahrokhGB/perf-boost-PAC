@@ -4,7 +4,6 @@ import numpy as np
 
 from config import device
 from .contractive_ren import ContractiveREN
-from utils.assistive_functions import to_tensor
 
 
 class PerfBoostController(nn.Module):

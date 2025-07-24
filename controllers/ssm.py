@@ -1,10 +1,13 @@
 import math
-import torch
+import torch, sys, os
 import torch.nn as nn
 import torch.nn.functional as F
 from collections import OrderedDict
 
-from .non_linearities import MLP, HamiltonianSIE, CouplingLayer
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(BASE_DIR)
+print('BASE_DIR', BASE_DIR)
+from controllers.non_linearities import MLP, HamiltonianSIE, CouplingLayer
 
 
 class LRU(nn.Module):
