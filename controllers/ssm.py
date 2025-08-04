@@ -146,6 +146,15 @@ class SSM(nn.Module):
             (name, self.state_dict()[name].shape) for name in self.training_param_names
         )
         return param_dict
+    
+    def get_parameters_as_vector(self):
+        vec = None
+        for name in self.training_param_names:
+            if vec is None:
+                vec = self.state_dict()[name].flatten()
+            else:
+                vec = torch.cat((vec, self.state_dict()[name].flatten()), 0)
+        return vec
 
 
 # Class implementing a cascade of N SSMs. Linear pre- and post-processing can be modified
@@ -207,6 +216,15 @@ class DeepSSM(nn.Module):
             (name, self.state_dict()[name]) for name in self.training_param_names
         )
         return param_dict
+    
+    def get_parameters_as_vector(self):
+        vec = None
+        for name in self.training_param_names:
+            if vec is None:
+                vec = self.state_dict()[name].flatten()
+            else:
+                vec = torch.cat((vec, self.state_dict()[name].flatten()), 0)
+        return vec
 
 
 if __name__ == "__main__":
