@@ -69,8 +69,8 @@ class HamiltonianSIE(nn.Module):
             self.b1 = nn.Parameter(b1)
             self.b2 = nn.Parameter(b2)
         else:
-            self.b1 = torch.zeros(self.n_layers, 1, self.half_state_dim)
-            self.b2 = torch.zeros(self.n_layers, 1, self.half_state_dim)
+            self.register_buffer('b1', torch.zeros(self.n_layers, 1, self.half_state_dim))
+            self.register_buffer('b2', torch.zeros(self.n_layers, 1, self.half_state_dim))
 
     def forward(self, x0, ini=0, end=None):
         # the size of x0 is (sampleNumber, 1, nf)
@@ -107,7 +107,7 @@ class CouplingLayer(nn.Module):
         super(CouplingLayer, self).__init__()
 
         self.dim_inputs = dim_inputs
-        self.mask = torch.arange(0, dim_inputs) % 2  # alternating inputs
+        self.register_buffer('mask', torch.arange(0, dim_inputs) % 2) # alternating inputs
 
         self.scale_net = FCNN(dim_in=dim_inputs, dim_out=dim_inputs, dim_hidden=dim_hidden)
         self.translate_net = FCNN(dim_in=dim_inputs, dim_out=dim_inputs, dim_hidden=dim_hidden)
@@ -120,8 +120,6 @@ class CouplingLayer(nn.Module):
 
     def forward(self, inputs, mode='direct'):
         mask = self.mask
-        print('mask device:', mask.device, 'inputs device:', inputs.device)
-        exit()
         masked_inputs = inputs * mask
         
 
