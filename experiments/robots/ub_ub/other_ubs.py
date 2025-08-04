@@ -92,10 +92,25 @@ for num_rollouts in S:
     if setup_loaded['cont_type']=='PerfBoost':
         ctl_generic = PerfBoostController(
             noiseless_forward=sys.noiseless_forward,
-            input_init=sys.x_init, output_init=sys.u_init,
-            dim_internal=setup_loaded['dim_internal'], dim_nl=setup_loaded['dim_nl'],
+            input_init=sys.x_init,
+            output_init=sys.u_init,
+            nn_type='REN',  # TODO: add SSM support
+            dim_internal=setup_loaded['dim_internal'],
+            output_amplification=20,
+            train_method=TRAIN_METHOD,
+            # SSM properties
+            scaffolding_nonlin=None,
+            dim_middle=None,
+            dim_scaffolding=None,
+            rmin=None,
+            rmax=None,
+            max_phase=None,
+            # REN properties
+            dim_nl=setup_loaded['dim_nl'],
             initialization_std=setup_loaded['cont_init_std'],
-            output_amplification=20, train_method=TRAIN_METHOD
+            #   pos_def_tol=args.pos_def_tol,
+            # contraction_rate_lb = args.contraction_rate_lb,
+            # ren_internal_state_init=None,  # None for random initialization
         ).to(device)
     elif setup_loaded['cont_type']=='Affine':
         ctl_generic = AffineController(
@@ -233,7 +248,7 @@ for num_rollouts in S:
 #     #     1/lambda_*math.log(sum(exp_neg_loss) + (math.exp(-lambda_*C)-1)*(math.log(1/deltahat)/2/num_prior_samples)**0.5)
 
     # # ------------ swapping denom ------------
-    # # ctl_generic.c_ren.hard_reset()
+    # # ctl_generic.emme.hard_reset()
 
     # num_samples = 100
     # sample_from = 'nf_post' #'prior' # 'nf_post'

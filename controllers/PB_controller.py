@@ -4,6 +4,7 @@ import numpy as np
 
 from config import device
 from .contractive_ren import ContractiveREN
+from controllers.ssm import DeepSSM
 
 
 class PerfBoostController(nn.Module):
@@ -16,31 +17,50 @@ class PerfBoostController(nn.Module):
         This controller has a memory for the last input ("self.last_input") and
         the last output ("self.last_output").
     """
-    def __init__(
-        self, noiseless_forward, input_init: torch.Tensor, output_init: torch.Tensor,
-        # acyclic REN properties
-        dim_internal: int, dim_nl: int,
-        initialization_std: float = 0.5,
-        posdef_tol: float = 0.001, contraction_rate_lb: float = 1.0,
-        ren_internal_state_init=None,
-        train_method: str = 'empirical',
-        # misc
-        output_amplification: float=20,
-    ):
+    def __init__(self,
+                 noiseless_forward,
+                 input_init: torch.Tensor,
+                 output_init: torch.Tensor,
+                 nn_type: str = "REN",
+                 dim_internal: int = 8,
+                 output_amplification: float = 20,
+                 train_method: str = 'empirical',
+                 # SSM properties
+                 scaffolding_nonlin: str = None,
+                 dim_middle: int = 6,
+                 dim_scaffolding: int = 30,
+                 rmin: float = 0.9,
+                 rmax: float = 1.0,
+                 max_phase: float = 6.283,
+                 # acyclic REN properties
+                 dim_nl: int = 8,
+                 initialization_std: float = 0.5,
+                 pos_def_tol: float = 0.001,
+                 contraction_rate_lb: float = 1.0,
+                 ren_internal_state_init=None,
+                 ):
         """
          Args:
-            noiseless_forward: system dynamics without process noise. can be TV.
-            input_init (torch.Tensor): initial input to the controller.
-            output_init (torch.Tensor): initial output from the controller before anything is calculated.
-            output_amplification (float): TODO
-            * the following are the same as AcyclicREN args:
-            dim_internal (int): Internal state (x) dimension. This state evolves with contraction properties.
-            dim_nl (int): Dimension of the input ("v") and ouput ("w") of the nonlinear static block of REN.
-            initialization_std (float, optional): Weight initialization. Set to 0.1 by default.
-            epsilon (float, optional): Positive and negligible scalar to force positive definite matrices.
-            contraction_rate_lb (float, optional): Lower bound on the contraction rate. Defaults to 1.
-            ren_internal_state_init (torch.Tensor, optional): initial state of the REN. Defaults to 0 when None.
+            noiseless_forward:            System dynamics without process noise. It can be TV.
+            input_init (torch.Tensor):    Initial input to the controller.
+            output_init (torch.Tensor):   Initial output from the controller before anything is calculated.
+            nn_type (str):                Which NN model to use for the Emme operator (Options: 'REN' or 'SSM')
+            dim_internal (int):           Internal state (x) dimension.
+            output_amplification (float): Scaling factor applied to the controller output. Default is 20.
             train_method (str): Training method. Defaults to empirical
+            ##### SSM-specific args:
+            scaffolding_nonlin (str):     Non-linearity used in SSMs for scaffolding.
+            dim_middle (int):             [Optional] Middle dimension for SSM deep architecture. Default is 6.
+            dim_scaffolding (int):        [Optional] Dimension of the hidden layers of scaffolding for SSM architecture. Only used for MLP and coupling_layers scaffolding. Default is 30.
+            rmin (float):                 [Optional] Minimum radius for SSM LRU initialization. Default is 0.9.
+            rmax (float):                 [Optional] Maximum radius for SSM LRU initialization. Default is 1.0.
+            max_phase (float):            [Optional] Maximum phase for SSM LRU initialization. Default is 6.283.
+            ##### REN-specific args:
+            dim_nl (int):                 Dimension of the input ("v") and output ("w") of the NL static block of REN.
+            initialization_std (float):   [Optional] Weight initialization. Set to 0.1 by default.
+            pos_def_tol (float):          [Optional] Positive and negligible scalar to force positive definite matrices.
+            contraction_rate_lb (float):  [Optional] Lower bound on the contraction rate. Default to 1.
+            ren_internal_state_init (torch.Tensor): [Optional] Initial state of the REN. Default to 0 when None.
         """
         super().__init__()
 
@@ -55,17 +75,36 @@ class PerfBoostController(nn.Module):
         self.dim_in = self.input_init.shape[-1]
         self.dim_out = self.output_init.shape[-1]
 
-        # define the REN
-        self.c_ren = ContractiveREN(
-            dim_in=self.dim_in, dim_out=self.dim_out, dim_internal=dim_internal,
-            dim_nl=dim_nl, initialization_std=initialization_std,
-            internal_state_init=ren_internal_state_init,
-            posdef_tol=posdef_tol, contraction_rate_lb=contraction_rate_lb,
-            train_method=train_method
-        ).to(device)
+        # set type of nn for emme
+        self.nn_type = nn_type
+        # define Emme as REN or SSM
+        if nn_type == "REN":
+            self.emme = ContractiveREN(
+                dim_in=self.dim_in, dim_out=self.dim_out, dim_internal=dim_internal,
+                dim_nl=dim_nl, initialization_std=initialization_std,
+                internal_state_init=ren_internal_state_init,
+                pos_def_tol=pos_def_tol, contraction_rate_lb=contraction_rate_lb
+            ).to(device)
+        elif nn_type == "SSM":
+            # define the SSM
+            self.emme = DeepSSM(
+                dim_in=self.dim_in,
+                dim_out=self.dim_out,
+                dim_internal=dim_internal,
+                dim_middle=dim_middle,
+                dim_scaffolding=dim_scaffolding,
+                scan=False,
+                rmin=rmin,
+                rmax=rmax,
+                max_phase=max_phase,
+                internal_state_init=None,
+                scaffolding_nonlin=scaffolding_nonlin
+            ).to(device)
+        else:
+            raise ValueError("Model for emme not implemented")
 
         # set number of trainable params
-        self.num_params = self.c_ren.num_params
+        self.num_params = self.emme.num_params
 
         # define the system dynamics without process noise
         self.noiseless_forward = noiseless_forward
@@ -79,7 +118,7 @@ class PerfBoostController(nn.Module):
         self.t = 0  # time
         self.last_input = self.input_init.detach().clone()
         self.last_output = self.output_init.detach().clone()
-        self.c_ren.reset()    # reset the REN state to the initial value
+        self.emme.reset()    # reset the REN state to the initial value
 
     def forward(self, input_t: torch.Tensor):
         """
@@ -92,7 +131,7 @@ class PerfBoostController(nn.Module):
         Return:
             y_out (torch.Tensor): Output with (batch_size, 1, self.dim_out).
         """
-        # assert self.c_ren.X.requires_grad
+        # assert self.emme.X.requires_grad
         # apply noiseless forward to get noise less input (noise less state of the plant)
         u_noiseless = self.noiseless_forward(
             t=self.t,
@@ -104,7 +143,7 @@ class PerfBoostController(nn.Module):
         w_ = input_t - u_noiseless # shape = (self.batch_size, 1, self.dim_in)
 
         # apply REN
-        output = self.c_ren.forward(w_)
+        output = self.emme.forward(w_)
         output = output*self.output_amplification   # shape = (self.batch_size, 1, self.dim_out)
 
         # update internal states
@@ -114,25 +153,25 @@ class PerfBoostController(nn.Module):
 
     # setters and getters
     def get_parameter_shapes(self):
-        return self.c_ren.get_parameter_shapes()
+        return self.emme.get_parameter_shapes()
 
     def get_named_parameters(self):
-        return self.c_ren.get_named_parameters()
+        return self.emme.get_named_parameters()
 
     # # def get_parameters_as_vector(self):
     # #     # TODO: implement without numpy
-    # #     return np.concatenate([p.detach().clone().cpu().numpy().flatten() for p in self.c_ren.parameters()])
+    # #     return np.concatenate([p.detach().clone().cpu().numpy().flatten() for p in self.emme.parameters()])
 
     def set_parameter(self, name, value):
-        param_shape = getattr(self.c_ren, name+'_shape')
+        param_shape = getattr(self.emme, name+'_shape')
         if torch.empty(param_shape).nelement()==value.nelement():
             value = value.reshape(param_shape)
         else:
             value = value.reshape(value.shape[0], *param_shape)
         if self.train_method=='empirical':
             value = torch.nn.Parameter(value)
-        setattr(self.c_ren, name, value)
-        self.c_ren._update_model_param()    # update dependent params
+        setattr(self.emme, name, value)
+        self.emme._update_model_param()    # update dependent params
 
     def set_parameters(self, param_dict):
         for name, value in param_dict.items():
@@ -167,9 +206,9 @@ class PerfBoostController(nn.Module):
             else:
                 raise AssertionError
             # set
-            if self.c_ren.train_method in ['SVGD', 'normflow']:
+            if self.emme.train_method in ['SVGD', 'normflow']:
                 self.set_parameter(name, value_tmp)
-            elif self.c_ren.train_method=='empirical':
+            elif self.emme.train_method=='empirical':
                 with torch.no_grad():
                     self.set_parameter(name, value_tmp)
             else:
@@ -187,4 +226,4 @@ class PerfBoostController(nn.Module):
         return torch.cat(self.parameters(), dim=-1)
 
     def get_parameters_as_vector(self):
-        return self.c_ren.get_parameters_as_vector()
+        return self.emme.get_parameters_as_vector()

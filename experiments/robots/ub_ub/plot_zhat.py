@@ -37,10 +37,25 @@ sys = RobotsSystem(
 # ------------ 3. Controller ------------
 ctl_generic = PerfBoostController(
     noiseless_forward=sys.noiseless_forward,
-    input_init=sys.x_init, output_init=sys.u_init,
-    dim_internal=8, dim_nl=8,
+    input_init=sys.x_init,
+    output_init=sys.u_init,
+    nn_type='REN',  # TODO: add SSM support
+    dim_internal=8,
+    output_amplification=20,
+    train_method='normflow',
+    # SSM properties
+    scaffolding_nonlin=None,
+    dim_middle=None,
+    dim_scaffolding=None,
+    rmin=None,
+    rmax=None,
+    max_phase=None,
+    # REN properties
+    dim_nl=8,
     initialization_std=0.1,
-    output_amplification=20, train_method='normflow'
+    #   pos_def_tol=args.pos_def_tol,
+    # contraction_rate_lb = args.contraction_rate_lb,
+    # ren_internal_state_init=None,  # None for random initialization
 ).to(device)
 
 # ------------ 4. Loss ------------

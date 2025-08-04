@@ -67,10 +67,25 @@ sys = RobotsSystem(
 assert args.cont_type=='PerfBoost'
 ctl_generic = PerfBoostController(
     noiseless_forward=sys.noiseless_forward,
-    input_init=sys.x_init, output_init=sys.u_init,
-    dim_internal=args.dim_internal, dim_nl=args.dim_nl,
+    input_init=sys.x_init,
+    output_init=sys.u_init,
+    nn_type=args.nn_type,
+    dim_internal=args.dim_internal,
+    output_amplification=args.output_amplification,
+    train_method='normflow',
+    # SSM properties
+    scaffolding_nonlin=args.scaffolding_nonlin,
+    dim_middle=args.dim_middle,
+    dim_scaffolding=args.dim_scaffolding,
+    rmin=args.rmin,
+    rmax=args.rmax,
+    max_phase=args.max_phase,
+    # REN properties
+    dim_nl=args.dim_nl,
     initialization_std=args.cont_init_std,
-    output_amplification=20, train_method='normflow'
+    #   pos_def_tol=args.pos_def_tol,
+    # contraction_rate_lb = args.contraction_rate_lb,
+    # ren_internal_state_init=None,  # None for random initialization
 ).to(device)
 num_params = ctl_generic.num_params
 logger.info('[INFO] Controller is of type ' + args.cont_type + ' and has %i parameters.' % num_params)
@@ -175,7 +190,7 @@ mcdim_terms = []
 for lambda_P, lambda_Q, S_P in zip(lambda_P_range, lambda_Q_range, num_rollouts_P_range):
     logger.info('\n\n------ Training prior using '+str(S_P)+' rollouts ------')
     ctl_generic.reset()
-    ctl_generic.c_ren.hard_reset()
+    ctl_generic.emme.hard_reset()
     # train data for prior
     train_data_P = train_data_full[:S_P, :]
     train_dataloader_P = DataLoader(train_data_P, batch_size=min(int(S_P), 256), shuffle=False)

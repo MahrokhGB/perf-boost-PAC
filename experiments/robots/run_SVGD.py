@@ -66,10 +66,25 @@ def train_svgd(args, logger, save_folder):
     if args.cont_type=='PerfBoost':
         ctl_generic = PerfBoostController(
             noiseless_forward=sys.noiseless_forward,
-            input_init=sys.x_init, output_init=sys.u_init,
-            dim_internal=args.dim_internal, dim_nl=args.dim_nl,
+            input_init=sys.x_init,
+            output_init=sys.u_init,
+            nn_type=args.nn_type,
+            dim_internal=args.dim_internal,
+            output_amplification=args.output_amplification,
+            train_method=TRAIN_METHOD,
+            # SSM properties
+            scaffolding_nonlin=args.scaffolding_nonlin,
+            dim_middle=args.dim_middle,
+            dim_scaffolding=args.dim_scaffolding,
+            rmin=args.rmin,
+            rmax=args.rmax,
+            max_phase=args.max_phase,
+            # REN properties
+            dim_nl=args.dim_nl,
             initialization_std=args.cont_init_std,
-            output_amplification=20, train_method=TRAIN_METHOD
+            #   pos_def_tol=args.pos_def_tol,
+            # contraction_rate_lb = args.contraction_rate_lb,
+            # ren_internal_state_init=None,  # None for random initialization
         ).to(device)
     elif args.cont_type=='Affine':
         ctl_generic = AffineController(
