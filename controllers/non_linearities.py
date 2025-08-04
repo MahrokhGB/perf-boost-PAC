@@ -121,6 +121,7 @@ class CouplingLayer(nn.Module):
     def forward(self, inputs, mode='direct'):
         mask = self.mask
         masked_inputs = inputs * mask
+        print('mask device:', mask.device, 'inputs device:', inputs.device)
 
         log_s = self.scale_net(masked_inputs) * (1 - mask)
         t = self.translate_net(masked_inputs) * (1 - mask)
