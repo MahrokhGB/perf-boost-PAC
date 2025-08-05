@@ -12,15 +12,43 @@ def define_tunables(args):
     # hidden_size = trial.suggest_int('hidden_size', 128, 512)
     # args.lr = trial.suggest_float('lr', args.lr/args.optuna_search_scale, args.lr*args.optuna_search_scale, log=True)
     if method=='empirical':
-        tunables = [
-            {
-                'name':'cont_init_std',
-                'nominal':args.cont_init_std,
-                'min':1e-3, 
-                'max':1, 
-                'log_scale':True
-            }
-        ]
+        if args.nn_type=='REN':
+            tunables = [
+                {
+                    'name':'cont_init_std',
+                    'nominal':args.cont_init_std,
+                    'min':1e-3, 
+                    'max':1, 
+                    'log_scale':True
+                },
+                # {
+                #     'name':'hidden_size',
+                #     'nominal':args.hidden_size,
+                #     'min':64, 
+                #     'max':512, 
+                #     'log_scale':False
+                # }
+            ]
+        elif args.nn_type=='SSM':
+            tunables = [
+                {
+                    'name':'r_min',
+                    'nominal':args.r_min,
+                    'min':1e-1, 
+                    'max':0.99, 
+                    'log_scale':True
+                },
+            ]
+        else:
+            tunables = [
+                {
+                    'name':'cont_init_std',
+                    'nominal':args.cont_init_std,
+                    'min':1e-3, 
+                    'max':1, 
+                    'log_scale':True
+                }
+            ]
     elif method in ['SVGD', 'normflow']:
         if not args.nominal_prior:
             tunables = [
