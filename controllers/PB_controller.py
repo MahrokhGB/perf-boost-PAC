@@ -163,15 +163,20 @@ class PerfBoostController(nn.Module):
     # #     return np.concatenate([p.detach().clone().cpu().numpy().flatten() for p in self.emme.parameters()])
 
     def set_parameter(self, name, value):
-        param_shape = getattr(self.emme, name+'_shape')
+        # param_shape = getattr(self.emme, name+'_shape')
+        param_shape = self.emme.get_parameter_shapes()[name]
         if torch.empty(param_shape).nelement()==value.nelement():
             value = value.reshape(param_shape)
         else:
             value = value.reshape(value.shape[0], *param_shape)
         if self.train_method=='empirical':
             value = torch.nn.Parameter(value)
-        setattr(self.emme, name, value)
-        self.emme._update_model_param()    # update dependent params
+        if isinstance(self.emme, DeepSSM):
+            # set the parameter in the SSM
+            self.emme.set_parameter(name, value)
+        else:
+            setattr(self.emme, name, value)
+            self.emme._update_model_param()    # update dependent params
 
     def set_parameters(self, param_dict):
         for name, value in param_dict.items():
@@ -188,7 +193,7 @@ class PerfBoostController(nn.Module):
         idx = 0
         for name, shape in self.get_parameter_shapes().items():
             if len(shape) == 1:
-                dim = shape
+                dim = shape[0]
             else:
                 dim = shape[-1]*shape[-2]
             # elif len(shape) == 2:
@@ -206,9 +211,9 @@ class PerfBoostController(nn.Module):
             else:
                 raise AssertionError
             # set
-            if self.emme.train_method in ['SVGD', 'normflow']:
+            if self.train_method in ['SVGD', 'normflow']:
                 self.set_parameter(name, value_tmp)
-            elif self.emme.train_method=='empirical':
+            elif self.train_method=='empirical':
                 with torch.no_grad():
                     self.set_parameter(name, value_tmp)
             else:

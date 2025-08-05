@@ -210,3 +210,24 @@ class CouplingLayer(nn.Module):
             else:
                 raise ValueError('Unknown parameter name: %s' % param_name)
         return p
+
+    def set_parameter(self, param_name, value):
+        if not '.' in param_name:
+            setattr(self, param_name, value)
+        else:
+            if param_name.split('.')[0] == 'scale_net':
+                if param_name.split('.')[2] == '0':
+                    setattr(self.scale_net.network[0], param_name.split('.')[-1], value)
+                elif param_name.split('.')[2] == '2':
+                    setattr(self.scale_net.network[2], param_name.split('.')[-1], value)
+                else:
+                    raise ValueError('Unknown layer in scale_net: %s' % param_name)
+            elif param_name.split('.')[0] == 'translate_net':
+                if param_name.split('.')[2] == '0':
+                    setattr(self.translate_net.network[0], param_name.split('.')[-1], value)
+                elif param_name.split('.')[2] == '2':
+                    setattr(self.translate_net.network[2], param_name.split('.')[-1], value)
+                else:
+                    raise ValueError('Unknown layer in translate_net: %s' % param_name)
+            else:
+                raise ValueError('Unknown parameter name: %s' % param_name)

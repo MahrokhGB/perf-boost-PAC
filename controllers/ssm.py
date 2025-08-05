@@ -192,6 +192,26 @@ class SSM(nn.Module):
             raise ValueError(f'Unknown parameter name: {param_name}')
         return p
 
+    def set_parameter(self, param_name, value):
+        """
+        Sets the tensor corresponding to the parameter name.
+        """
+        if param_name.startswith('lru.'):
+            if param_name[4:] in ['D', 'theta_log', 'nu_log', 'gamma_log']:
+                value = torch.nn.Parameter(value.real)
+            setattr(self.lru, param_name[4:], value)
+        elif param_name.startswith('scaffold.'):
+            value = torch.nn.Parameter(value.real)
+            self.scaffold.set_parameter(param_name[9:], value)
+        elif param_name == 'lin.weight':
+            value = torch.nn.Parameter(value.real)
+            setattr(self.lin, 'weight', value)
+        elif param_name == 'lin.bias':
+            value = torch.nn.Parameter(value.real)
+            setattr(self.lin, 'bias', value)
+        else:
+            raise ValueError(f'Unknown parameter name: {param_name}')
+
 
 # Class implementing a cascade of N SSMs. Linear pre- and post-processing can be modified
 class DeepSSM(nn.Module):
@@ -268,6 +288,17 @@ class DeepSSM(nn.Module):
         else:
             raise ValueError(f'Unknown parameter name: {param_name}')
         return p
+    
+    def set_parameter(self, param_name, value):
+        """
+        Sets the tensor corresponding to the parameter name.
+        """
+        if param_name.startswith('ssm1.'):
+            self.ssm1.set_parameter(param_name[5:], value)
+        elif param_name.startswith('ssm2.'):
+            self.ssm2.set_parameter(param_name[5:], value)
+        else:
+            raise ValueError(f'Unknown parameter name: {param_name}')
 
 if __name__ == "__main__":
     dim_in = 2
@@ -277,9 +308,6 @@ if __name__ == "__main__":
     batch_size = 3
     ssm = SSM(dim_in, dim_out, dim_internal, scan=False, dim_scaffolding=dim_scaffolding, scaffolding_nonlin="hamiltonian")
     deep_ssm = DeepSSM(dim_in, dim_out, dim_internal, dim_middle=6, dim_scaffolding=dim_scaffolding, scaffolding_nonlin="hamiltonian")
-
-    print(ssm.get_parameter_shapes())
-    exit()
     
     # Print dimensions:
     print("B has dimensions: ", ssm.lru.B.shape)

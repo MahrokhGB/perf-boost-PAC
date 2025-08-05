@@ -1,4 +1,4 @@
-import sys, os, logging, torch, time
+import sys, os, logging, torch, time, copy
 from datetime import datetime
 from torch.utils.data import DataLoader
 
@@ -258,7 +258,14 @@ def train_emp(args, logger, save_folder):
     )
 
     # save
-    res_dict = ctl_generic.state_dict()
+    res_dict_complex = dict(ctl_generic.state_dict())
+    res_dict = copy.deepcopy(res_dict_complex)
+    for key, value in res_dict_complex.items():
+        # key is complex. Saving real and imaginary parts separately.
+        if value.dtype == torch.complex64:
+            res_dict.pop(key)
+            res_dict[key+'_real'] = value.real
+            res_dict[key+'_imag'] = value.imag
     res_dict['Q'] = Q
     res_dict['original_train_loss'] = original_train_loss.item()
     res_dict['bounded_train_loss'] = bounded_train_loss.item()
@@ -267,6 +274,7 @@ def train_emp(args, logger, save_folder):
     res_dict['bounded_test_loss'] = bounded_test_loss
     res_dict['test_num_col'] = test_num_col
     filename = os.path.join(save_folder, 'trained_controller'+'.pt')
+   
     torch.save(res_dict, filename)
     logger.info('[INFO] saved trained model.')
 
