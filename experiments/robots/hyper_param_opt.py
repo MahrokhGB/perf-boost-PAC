@@ -112,7 +112,14 @@ def objective(trial):
     elif method=='normflow':
         res_dict, _ = train_normflow(args, logger, save_folder)
 
-    return res_dict['train_loss']
+    if 'train_loss' in res_dict:
+        return res_dict['train_loss']
+    elif 'bounded_train_loss' in res_dict:
+        return res_dict['bounded_train_loss']
+    elif 'original_train_loss' in res_dict:
+        return res_dict['original_train_loss']
+    else:
+        raise ValueError("No training loss found in the result dictionary.")
 
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
