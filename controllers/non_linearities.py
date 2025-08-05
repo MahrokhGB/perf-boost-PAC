@@ -14,6 +14,8 @@ class MLP(nn.Module):
                                    nn.ReLU(),  # Activation after hidden layer
                                    nn.Linear(hidden_size, output_size, bias=False)  # Output layer (no activation)
                                    )
+        
+        self.extract_param_names()  # Initialize param_names
 
     def forward(self, x):
         if x.dim() == 3:
@@ -34,6 +36,12 @@ class MLP(nn.Module):
             x = self.model(x)
 
         return x
+    
+    def extract_param_names(self):
+        raise NotImplementedError("This method should be implemented in subclasses to return parameter names.")
+        
+    def get_parameters_as_vactor(self):
+        raise NotImplementedError("This method should be implemented in subclasses to return parameters as a vector.")
 
 
 class HamiltonianSIE(nn.Module):
@@ -72,6 +80,8 @@ class HamiltonianSIE(nn.Module):
             self.register_buffer('b1', torch.zeros(self.n_layers, 1, self.half_state_dim))
             self.register_buffer('b2', torch.zeros(self.n_layers, 1, self.half_state_dim))
 
+        self.extract_param_names()  # Initialize param_names
+
     def forward(self, x0, ini=0, end=None):
         # the size of x0 is (sampleNumber, 1, nf)
         if end is None:
@@ -83,6 +93,12 @@ class HamiltonianSIE(nn.Module):
             q = q + self.h * F.linear(self.act(F.linear(p, self.k1[j].transpose(0,1)) + self.b2[j]), self.k1[j])
         x = torch.cat([p, q], dim=2)
         return x
+    
+    def extract_param_names(self):
+        raise NotImplementedError("This method should be implemented in subclasses to return parameter names.")
+        
+    def get_parameters_as_vactor(self):
+        raise NotImplementedError("This method should be implemented in subclasses to return parameters as a vector.")
 
 
 class FCNN(nn.Module):
@@ -95,8 +111,27 @@ class FCNN(nn.Module):
             nn.Linear(dim_hidden, dim_out, bias=False)
         )
 
+        self.extract_param_names()  # Initialize param_names
+
     def forward(self, x):
         return self.network(x)
+    
+    def extract_param_names(self):
+        self.training_param_names = ['network.0.weight', 'network.2.weight']
+        if self.network[0].bias is not None:
+            if self.network[0].bias.requires_grad:
+                self.training_param_names.append('network.0.bias')
+        if self.network[2].bias is not None:
+            if self.network[2].bias.requires_grad:
+                self.training_param_names.append('network.2.bias')
+        
+    def get_parameters_as_vactor(self):
+        vec = self.network[0].weight.flatten() + self.network[2].weight.flatten()
+        if 'network.0.bias' in self.training_param_names:
+            vec = torch.cat((vec, self.network[0].bias.flatten()), 0)
+        if 'network.2.bias' in self.training_param_names:
+            vec = torch.cat((vec, self.network[2].bias.flatten()), 0)
+        return vec
 
 
 class CouplingLayer(nn.Module):
@@ -118,6 +153,8 @@ class CouplingLayer(nn.Module):
         nn.init.normal_(self.scale_net.network[0].weight.data, std=0.1)
         nn.init.normal_(self.scale_net.network[2].weight.data, std=0.1)
 
+        self.extract_param_names()  # Initialize param_names
+
     def forward(self, inputs, mode='direct'):
         mask = self.mask
         masked_inputs = inputs * mask
@@ -132,3 +169,44 @@ class CouplingLayer(nn.Module):
         else:
             s = torch.exp(-log_s)
             return (inputs - t) * s
+        
+    def extract_param_names(self):
+        self.training_param_names = list(self.state_dict().keys())
+        # remove if doesn't require_grad
+        for param_name in self.training_param_names:
+            p = self._get_tensor_from_name(param_name)
+            if not p.requires_grad:
+                self.training_param_names.remove(param_name)
+
+    def get_parameters_as_vector(self):
+        vec = None
+        for param_name in self.training_param_names:
+            p = self._get_tensor_from_name(param_name)
+            assert p.requires_grad, f'Parameter {param_name} does not require gradient.'
+            if vec is None:
+                vec = p.flatten()
+            else:
+                vec = torch.cat((vec, p.flatten()), 0)
+        return vec
+    
+    def _get_tensor_from_name(self, param_name):
+        if not '.' in param_name:
+            p = getattr(self, param_name)
+        else:
+            if param_name.split('.')[0] == 'scale_net':
+                if param_name.split('.')[2] == '0':
+                    p = getattr(self.scale_net.network[0], param_name.split('.')[-1])
+                elif param_name.split('.')[2] == '2':
+                    p = getattr(self.scale_net.network[2], param_name.split('.')[-1])
+                else:
+                    raise ValueError('Unknown layer in scale_net: %s' % param_name)
+            elif param_name.split('.')[0] == 'translate_net':
+                if param_name.split('.')[2] == '0':
+                    p = getattr(self.translate_net.network[0], param_name.split('.')[-1])
+                elif param_name.split('.')[2] == '2':
+                    p = getattr(self.translate_net.network[2], param_name.split('.')[-1])
+                else:
+                    raise ValueError('Unknown layer in translate_net: %s' % param_name)
+            else:
+                raise ValueError('Unknown parameter name: %s' % param_name)
+        return p

@@ -85,6 +85,18 @@ class LRU(nn.Module):
         self.x = lambda_c * self.x + gammas * F.linear(torch.complex(u_in, torch.zeros(1, device=self.B.device)), self.B)
         y_out = 2 * F.linear(self.x, self.C).real + F.linear(u_in, self.D)
         return y_out
+    
+    def get_parameters_as_vector(self):
+        """
+        Returns the parameters of the LRU as a vector.
+        """
+        vec = None
+        for name in self.training_param_names:
+            if vec is None:
+                vec = getattr(self, name).flatten()
+            else:
+                vec = torch.cat((vec, getattr(self, name).flatten()), 0)
+        return vec
 
 
 # Class for implementing LRU + a user-defined scaffolding, this is our SSM block.
@@ -127,9 +139,9 @@ class SSM(nn.Module):
         self.lru = LRU(dim_in, dim_out, dim_internal, scan, rmin, rmax, max_phase, internal_state_init).to(device)
         self.lin = nn.Linear(dim_in, dim_out, bias=False).to(device)
 
-        self.training_param_names = self.state_dict().keys()
-
         nn.init.zeros_(self.lin.weight.data)
+
+        self.extract_param_names()  # Initialize param_names
 
     def forward(self, u):
         result = self.scaffold(self.lru(u)) + self.lin(u)
@@ -147,14 +159,38 @@ class SSM(nn.Module):
         )
         return param_dict
     
+    def extract_param_names(self):
+        """
+        Extracts the names of the parameters in the SSM.
+        """
+        self.training_param_names = ['lru.' + name for name in self.lru.training_param_names] + \
+                                    ['scaffold.' + name for name in self.scaffold.training_param_names] + \
+                                    ['lin.weight']
+        if self.lin.bias is not None:
+            if self.lin.bias.requires_grad:
+                self.training_param_names.append('lin.bias')
+                
     def get_parameters_as_vector(self):
-        vec = None
-        for name in self.training_param_names:
-            if vec is None:
-                vec = self.state_dict()[name].flatten()
-            else:
-                vec = torch.cat((vec, self.state_dict()[name].flatten()), 0)
+        vec = torch.cat((self.lru.get_parameters_as_vector(), self.scaffold.get_parameters_as_vector(), self.lin.weight.flatten()), 0)
+        if self.lin.bias is not None and self.lin.bias.requires_grad:
+            vec = torch.cat((vec, self.lin.bias.flatten()), 0)
         return vec
+    
+    def _get_tensor_from_name(self, param_name):
+        """
+        Returns the tensor corresponding to the parameter name.
+        """
+        if param_name.startswith('lru.'):
+            p = getattr(self.lru, param_name[4:])
+        elif param_name.startswith('scaffold.'):
+            p = self.scaffold._get_tensor_from_name(param_name[9:])
+        elif param_name == 'lin.weight':
+            p = getattr(self.lin, 'weight')
+        elif param_name == 'lin.bias':
+            p = getattr(self.lin, 'bias')
+        else:
+            raise ValueError(f'Unknown parameter name: {param_name}')
+        return p
 
 
 # Class implementing a cascade of N SSMs. Linear pre- and post-processing can be modified
@@ -193,8 +229,9 @@ class DeepSSM(nn.Module):
         )
 
         # count number of parameters
-        self.training_param_names = self.state_dict().keys()
-        self.num_params = sum(p.numel() for p in self.state_dict().values())
+        self.training_param_names = ['ssm1.' + name for name in self.ssm1.training_param_names] + \
+                                     ['ssm2.' + name for name in self.ssm2.training_param_names]
+        self.num_params = sum(p.numel() for p in self.parameters())
 
     def forward(self, u_in):
         y_out = self.ssm2(self.ssm1(u_in))
@@ -213,19 +250,24 @@ class DeepSSM(nn.Module):
 
     def get_named_parameters(self):
         param_dict = OrderedDict(
-            (name, self.state_dict()[name]) for name in self.training_param_names
+            (name, self._get_tensor_from_name(name)) for name in self.training_param_names
         )
         return param_dict
     
     def get_parameters_as_vector(self):
-        vec = None
-        for name in self.training_param_names:
-            if vec is None:
-                vec = self.state_dict()[name].flatten()
-            else:
-                vec = torch.cat((vec, self.state_dict()[name].flatten()), 0)
+        vec = torch.cat((self.ssm1.get_parameters_as_vector(), self.ssm2.get_parameters_as_vector()), 0)
+        assert vec.shape[0] == self.num_params
+        assert vec.requires_grad and not vec.is_leaf
         return vec
-
+    
+    def _get_tensor_from_name(self, param_name):
+        if param_name.startswith('ssm1.'):
+            p = self.ssm1._get_tensor_from_name(param_name[5:])
+        elif param_name.startswith('ssm2.'):
+            p = self.ssm2._get_tensor_from_name(param_name[5:])
+        else:
+            raise ValueError(f'Unknown parameter name: {param_name}')
+        return p
 
 if __name__ == "__main__":
     dim_in = 2
