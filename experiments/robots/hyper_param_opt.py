@@ -32,8 +32,8 @@ def define_tunables(args):
         elif args.nn_type=='SSM':
             tunables = [
                 {
-                    'name':'r_min',
-                    'nominal':args.r_min,
+                    'name':'rmin',
+                    'nominal':args.rmin,
                     'min':1e-1, 
                     'max':0.99, 
                     'log_scale':True
