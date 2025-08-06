@@ -158,8 +158,7 @@ def train_svgd(args, logger, save_folder):
                 raise ValueError("No nominal controllers found in the specified directory.")
             logger.info('[INFO] Loaded '+str(len(res_dict_loaded))+' nominal controllers.')
         prior_dict = {'type':'Gaussian'}
-        training_param_names = ['X', 'Y', 'B2', 'C2', 'D21', 'D22', 'D12']
-        for name in training_param_names:
+        for name in ctl_generic.emme.training_param_names:
             if args.data_dep_prior:
                 prior_dict[name+'_loc'] = res_dict_loaded[name]
                 prior_dict[name+'_scale'] = args.prior_std
