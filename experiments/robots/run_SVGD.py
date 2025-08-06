@@ -152,13 +152,33 @@ def train_svgd(args, logger, save_folder):
             for _, dirs, _ in os.walk(os.path.join(save_path, 'nominal', args.nn_type)):
                 for dir in dirs:
                     filename_load = os.path.join(save_path, 'nominal', args.nn_type, dir, 'trained_controller.pt')
-                    res_dict_loaded.append(torch.load(filename_load))
+                    tmp_dict = torch.load(filename_load)
+                    if args.nn_type=='SSM':
+                        all_keys = list(tmp_dict.keys())
+                        # remove emme from the beginning of dict keys
+                        for key in all_keys:
+                            tmp_dict[key[5:]] = tmp_dict.pop(key)
+                        # merge real and imaginary parts of B and C
+                        for i in [1,2]:
+                            tmp_dict['ssm'+str(i)+'.lru.B'] = torch.complex(tmp_dict['ssm'+str(i)+'.lru.B_real'], tmp_dict['ssm'+str(i)+'.lru.B_imag'])
+                            tmp_dict['ssm'+str(i)+'.lru.C'] = torch.complex(tmp_dict['ssm'+str(i)+'.lru.C_real'], tmp_dict['ssm'+str(i)+'.lru.C_imag'])
+                            tmp_dict.pop('ssm'+str(i)+'.lru.B_real')
+                            tmp_dict.pop('ssm'+str(i)+'.lru.B_imag')
+                            tmp_dict.pop('ssm'+str(i)+'.lru.C_real')
+                            tmp_dict.pop('ssm'+str(i)+'.lru.C_imag')
+                    res_dict_loaded.append(tmp_dict)
             # check if any nominal controllers were loaded 
             if len(res_dict_loaded) == 0:
                 raise ValueError("No nominal controllers found in the specified directory.")
             logger.info('[INFO] Loaded '+str(len(res_dict_loaded))+' nominal controllers.')
         prior_dict = {'type':'Gaussian'}
-        for name in ctl_generic.emme.training_param_names:
+
+        training_param_names = ctl_generic.emme.training_param_names
+        
+
+        print('\n\nTraining param names:', training_param_names)
+        print('\n\nloaded res_dict keys:', res_dict_loaded[0].keys())
+        for name in training_param_names:
             if args.data_dep_prior:
                 prior_dict[name+'_loc'] = res_dict_loaded[name]
                 prior_dict[name+'_scale'] = args.prior_std
