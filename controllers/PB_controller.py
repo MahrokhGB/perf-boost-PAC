@@ -169,8 +169,9 @@ class PerfBoostController(nn.Module):
             value = value.reshape(param_shape)
         else:
             value = value.reshape(value.shape[0], *param_shape)
-        if self.train_method=='empirical':
-            value = torch.nn.Parameter(value)
+        value = torch.nn.Parameter(value)
+        # if self.train_method=='empirical':
+        #     value = torch.nn.Parameter(value)
         if isinstance(self.emme, DeepSSM):
             # set the parameter in the SSM
             self.emme.set_parameter(name, value)
@@ -211,9 +212,9 @@ class PerfBoostController(nn.Module):
             else:
                 raise AssertionError
             # set
-            if self.train_method in ['SVGD', 'normflow']:
+            if self.emme.train_method in ['SVGD', 'normflow']:
                 self.set_parameter(name, value_tmp)
-            elif self.train_method=='empirical':
+            elif self.emme.train_method=='empirical':
                 with torch.no_grad():
                     self.set_parameter(name, value_tmp)
             else:

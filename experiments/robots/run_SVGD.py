@@ -175,9 +175,6 @@ def train_svgd(args, logger, save_folder):
 
         training_param_names = ctl_generic.emme.training_param_names
         
-
-        print('\n\nTraining param names:', training_param_names)
-        print('\n\nloaded res_dict keys:', res_dict_loaded[0].keys())
         for name in training_param_names:
             if args.data_dep_prior:
                 prior_dict[name+'_loc'] = res_dict_loaded[name]

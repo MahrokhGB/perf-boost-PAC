@@ -31,7 +31,6 @@ class SVGDCont():
 
         self.best_particles = None
         self.fitted = False
-        self.unknown_err = False
 
         # Initialize particles
         if initial_particles is not None:
@@ -170,18 +169,19 @@ class SVGDCont():
             # iterate over all data batches
             for train_data_batch in train_dataloader:
                 # take a step
-                try:
-                    self.svgd.step(self.particles, train_data_batch)
-                except Exception as e:
-                    self.logger.info('[Unhandled ERR] in SVGD step: ' + type(e).__name__ + '\n')
-                    self.logger.info(e)
-                    self.unknown_err = True
+                self.svgd.step(self.particles, train_data_batch)
+                # try:
+                #     self.svgd.step(self.particles, train_data_batch)
+                # except Exception as e:
+                #     self.logger.info('[Unhandled ERR] in SVGD step: ' + type(e).__name__ + '\n')
+                #     self.logger.info(e)
+                #     exit()
             
             last_params = self.particles.detach().clone()
             svgd_loss_hist[epoch]= -self.svgd.log_prob_particles.item() #to('cpu').data.numpy()
 
             # --- print stats ---
-            if (epoch % log_period == 0) and (not self.unknown_err):
+            if (epoch % log_period == 0):
                 # print(self.particles.detach().clone()[0,0:10])
                 duration = time.time() - t
                 message = 'Epoch %d/%d - Elapsed time %.2f sec - SVGD Loss in epoch %.4f' % (
@@ -198,7 +198,6 @@ class SVGDCont():
                     except Exception as e:
                         message += '[Unhandled ERR] in eval valid rollouts:'
                         self.logger.info(e)
-                        self.unknown_err = True
                         exit()
 
                     # update the best particles if return_best
@@ -242,12 +241,6 @@ class SVGDCont():
                     fig.savefig(os.path.join(save_folder, 'loss.pdf'))
                     plt.close(fig)
 
-
-            # go one iter back if non-psd
-            if self.unknown_err:
-                self.logger.info('Going back one iteration due to unknown error.')
-                self.particles = last_params.detach().clone()  # set back params to the previous iteration
-                break
 
         self.fitted = True
 
