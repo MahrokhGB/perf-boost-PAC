@@ -129,6 +129,8 @@ class GibbsPosterior():
                         scale_val = scale_val.flatten().to(device)
                     else:
                         scale_val = scale_val*torch.ones(nelement, device=device)
+                    # replace zeros with 1e-3
+                    scale_val[scale_val==0] = 1e-3
                     # define distribution
                     dist = Normal(loc=loc_val, scale=scale_val)
                 # Uniform prior
