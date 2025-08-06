@@ -148,6 +148,8 @@ def train_svgd(args, logger, save_folder):
                     for dir in dirs:
                         filename_load = os.path.join(save_path, 'nominal', dir, 'trained_controller.pt')
                         res_dict_loaded.append(torch.load(filename_load))
+            if len(res_dict_loaded) == 0:
+                raise ValueError("No nominal controllers found in the specified directory.")
             logger.info('[INFO] Loaded '+str(len(res_dict_loaded))+' nominal controllers.')
         prior_dict = {'type':'Gaussian'}
         training_param_names = ['X', 'Y', 'B2', 'C2', 'D21', 'D22', 'D12']
@@ -255,7 +257,7 @@ if __name__=='__main__':
     # ----- SET UP LOGGER -----
     now = datetime.now().strftime("%m_%d_%H_%M_%S")
     save_path = os.path.join(BASE_DIR, 'experiments', 'robots', 'saved_results')
-    save_folder = os.path.join(save_path, 'SVGD', args.cont_type+'_'+now)
+    save_folder = os.path.join(save_path, 'SVGD', args.nn_type, args.cont_type+'_'+now)
     os.makedirs(save_folder)
     logging.basicConfig(filename=os.path.join(save_folder, 'log'), format='%(asctime)s %(message)s', filemode='w')
     logger = logging.getLogger('ren_controller_')

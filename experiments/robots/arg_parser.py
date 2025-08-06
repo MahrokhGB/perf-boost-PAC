@@ -46,7 +46,7 @@ def argument_parser():
     parser.add_argument('--dim-scaffolding', type=int, default=None,
                         help='Dimension of the hidden layers of scaffolding for SSM architecture. Only used for MLP and coupling_layers scaffolding. Default is 18.')
     parser.add_argument('--rmin', type=float, default=None,
-                        help='Minimum radius for SSM LRU initialization. Default is 0.9.')
+                        help='Minimum radius for SSM LRU initialization. Default is 0.7.')
     parser.add_argument('--rmax', type=float, default=None,
                         help='Maximum radius for SSM LRU initialization. Default is 1.0.')
     parser.add_argument('--max-phase', type=float, default=None,
@@ -284,7 +284,7 @@ def set_ren_ssm_defaults(args):
         args.scaffolding_nonlin = 'coupling_layers' if args.scaffolding_nonlin is None else args.scaffolding_nonlin
         args.dim_middle = 4 if args.dim_middle is None else args.dim_middle
         args.dim_scaffolding = 18 if args.dim_scaffolding is None else args.dim_scaffolding
-        args.rmin = 0.9 if args.rmin is None else args.rmin
+        args.rmin = 0.7 if args.rmin is None else args.rmin
         args.rmax = 1.0 if args.rmax is None else args.rmax
         args.max_phase = 6.283 if args.max_phase is None else args.max_phase
         # check none of REN parameters are set

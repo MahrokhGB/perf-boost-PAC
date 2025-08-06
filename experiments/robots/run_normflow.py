@@ -293,7 +293,7 @@ if __name__=='__main__':
     # ----- SET UP LOGGER -----
     now = datetime.now().strftime("%m_%d_%H_%M_%S")
     save_path = os.path.join(BASE_DIR, 'experiments', 'robots', 'saved_results')
-    save_folder = os.path.join(save_path, 'normflow', args.cont_type+'_'+now)
+    save_folder = os.path.join(save_path, 'normflow', args.nn_type, args.cont_type+'_'+now)
     os.makedirs(save_folder)
     logging.basicConfig(filename=os.path.join(save_folder, 'log'), format='%(asctime)s %(message)s', filemode='w')
     logger = logging.getLogger('ren_controller_')

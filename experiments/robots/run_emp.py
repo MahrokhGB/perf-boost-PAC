@@ -295,7 +295,7 @@ if __name__=='__main__':
         save_path = os.path.join(saved_results_path, 'nominal')
     else:
         save_path = os.path.join(saved_results_path, 'empirical')
-    save_folder = os.path.join(save_path, args.cont_type+'_'+now)
+    save_folder = os.path.join(save_path, args.nn_type, args.cont_type+'_'+now)
     os.makedirs(save_folder)
     logging.basicConfig(filename=os.path.join(save_folder, 'log'), format='%(asctime)s %(message)s', filemode='w')
     logger = logging.getLogger('perf_boost_')
