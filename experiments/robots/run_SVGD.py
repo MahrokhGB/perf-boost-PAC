@@ -144,9 +144,9 @@ def train_svgd(args, logger, save_folder):
         if args.nominal_prior:
             res_dict_loaded = []
             if args.dim_nl==8 and args.dim_internal==8:
-                for _, dirs, _ in os.walk(os.path.join(save_path, 'nominal')):
+                for _, dirs, _ in os.walk(os.path.join(save_path, 'nominal', args.nn_type)):
                     for dir in dirs:
-                        filename_load = os.path.join(save_path, 'nominal', dir, 'trained_controller.pt')
+                        filename_load = os.path.join(save_path, 'nominal', args.nn_type, dir, 'trained_controller.pt')
                         res_dict_loaded.append(torch.load(filename_load))
             if len(res_dict_loaded) == 0:
                 raise ValueError("No nominal controllers found in the specified directory.")

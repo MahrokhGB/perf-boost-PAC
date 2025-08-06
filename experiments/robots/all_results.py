@@ -94,6 +94,7 @@ res_SVGD = [
 ]
 
 # -----------------------------------------------------
+# -----------------------------------------------------
 # SVGD - 1 particle - 32 rollouts - using the best nominal_prior_std_scale - change seed
 # --------- REN ---------
 # python3 Simulations/perf-boost-PAC/experiments/robots/run_SVGD.py --num-rollouts 32 --batch-size 32 --cont-type PerfBoost --epochs 5000 --log-epoch 50 --early-stopping True --nominal-prior True --delta 0.1 --num-particles 1 --lr 5e-4 --nominal-prior-std-scale 39.546884104715836 --random-seed 0
@@ -141,6 +142,7 @@ res_emp_SSM_32_rollouts = {
 
 # -----------------------------------------------------
 # normflow - 32 rollouts
+# --------- REN ---------
 # python3 Simulations/perf-boost-PAC/experiments/robots/run_normflow.py --num-rollouts 32 --batch-size 32 --cont-type PerfBoost --epochs 5000 --log-epoch 50 --lr 5e-4 --base-is-prior True --nominal-prior True --nominal-prior-std-scale 58.93082020462471 --flow-activation tanh --delta 0.1 --random-seed 500 
 res_normflow_32_rollouts = {
     'num_rollouts': 32,
@@ -151,6 +153,8 @@ res_normflow_32_rollouts = {
     'original test loss':None,
     'test num collisions':[4, 11, 81, 5, 22]
 }
+# --------- SSM ---------
+# python3 Simulations/perf-boost-PAC/experiments/robots/run_normflow.py --num-rollouts 32 --batch-size 32 --cont-type PerfBoost --epochs 5000 --log-epoch 50 --lr 5e-4 --base-is-prior True --nominal-prior True --nominal-prior-std-scale 58.93082020462471 --flow-activation tanh --delta 0.1 --nn-type SSM --random-seed 500 
 
 # -----------------------------------------------------
 # -----------------------------------------------------
