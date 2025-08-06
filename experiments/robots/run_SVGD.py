@@ -143,11 +143,17 @@ def train_svgd(args, logger, save_folder):
                     res_dict_loaded = torch.load(filename_load)
         if args.nominal_prior:
             res_dict_loaded = []
-            if args.dim_nl==8 and args.dim_internal==8:
-                for _, dirs, _ in os.walk(os.path.join(save_path, 'nominal', args.nn_type)):
-                    for dir in dirs:
-                        filename_load = os.path.join(save_path, 'nominal', args.nn_type, dir, 'trained_controller.pt')
-                        res_dict_loaded.append(torch.load(filename_load))
+            # check the setup is the same as the nominal controllers
+            if args.nn_type=='REN':
+                assert args.dim_nl==8 and args.dim_internal==8, 'No nominal controllers found for REN with the specified dimensions.'
+            elif args.nn_type=='SSM':
+                assert args.dim_internal==8 and args.dim_middle==4 and args.dim_scaffolding==18, 'No nominal controllers found for SSM with the specified dimensions.'
+            # load nominal controllers
+            for _, dirs, _ in os.walk(os.path.join(save_path, 'nominal', args.nn_type)):
+                for dir in dirs:
+                    filename_load = os.path.join(save_path, 'nominal', args.nn_type, dir, 'trained_controller.pt')
+                    res_dict_loaded.append(torch.load(filename_load))
+            # check if any nominal controllers were loaded 
             if len(res_dict_loaded) == 0:
                 raise ValueError("No nominal controllers found in the specified directory.")
             logger.info('[INFO] Loaded '+str(len(res_dict_loaded))+' nominal controllers.')
