@@ -13,7 +13,7 @@ from controllers import PerfBoostController
 from loss_functions import RobotsLossMultiBatch
 from utils.assistive_functions import WrapLogger
 from arg_parser import argument_parser, print_args
-from inference_algs.distributions import GibbsPosterior
+from inference_algs.distributions import GibbsPosterior, define_prior
 from inference_algs.normflow_assist.mynf import NormalizingFlow
 from inference_algs.normflow_assist import GibbsWrapperNF
 from ub_utils import get_mcdim_ub
@@ -164,37 +164,12 @@ print('min_ind', min_ind,
 
 # ------------ 3. Train step 1 ------------
 # prior for step 1
-if args.data_dep_prior:
-    if args.dim_nl==8 and args.dim_internal==8:
-        if args.num_rollouts_prior==5:
-            filename_load = os.path.join(save_path_rob, 'empirical', 'pretrained', 'trained_controller.pt')
-            res_dict_loaded = torch.load(filename_load)
-if args.nominal_prior:
-    res_dict_loaded = []
-    if args.dim_nl==8 and args.dim_internal==8:
-        for _, dirs, _ in os.walk(os.path.join(save_path_rob, 'nominal')):
-            for dir in dirs:
-                filename_load = os.path.join(save_path_rob, 'nominal', dir, 'trained_controller.pt')
-                res_dict_loaded.append(torch.load(filename_load))
-    logger.info('[INFO] Loaded '+str(len(res_dict_loaded))+' nominal controllers.')
-prior_dict = {'type':'Gaussian'}
-training_param_names = ['X', 'Y', 'B2', 'C2', 'D21', 'D22', 'D12']
-for name in training_param_names:
-    if args.data_dep_prior:
-        prior_dict[name+'_loc'] = res_dict_loaded[name]
-        prior_dict[name+'_scale'] = args.prior_std
-    elif args.nominal_prior:
-        PRIOR_STDP_SCALE = 50 # TODO
-        logger.info('[INFO] Prior distribution is the distribution over nominal controllers, with std scaled by %.4f.' % PRIOR_STDP_SCALE)
-        vals = torch.stack([res[name] for res in res_dict_loaded], dim=0)
-        # val and std computed elementwise. same shape as the training param
-        prior_dict[name+'_loc'] = vals.mean(dim=0)  
-        prior_dict[name+'_scale'] = vals.std(dim=0, correction=1) * PRIOR_STDP_SCALE
-    else:
-        prior_dict[name+'_loc'] = 0
-        prior_dict[name+'_scale'] = args.prior_std
+prior_dict = define_prior(
+        args=args, training_param_names=ctl_generic.emme.training_param_names, 
+        save_path=save_path, logger=logger
+    )
 
-# posteiror for step 1
+# posterior for step 1
 mcdim_terms = []
 for lambda_P, lambda_Q, S_P in zip(lambda_P_range, lambda_Q_range, num_rollouts_P_range):
     logger.info('\n\n------ Training prior using '+str(S_P)+' rollouts ------')

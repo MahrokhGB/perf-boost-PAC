@@ -15,7 +15,7 @@ from utils.plot_functions import *
 from controllers import PerfBoostController, AffineController, NNController
 from loss_functions import RobotsLossMultiBatch
 from utils.assistive_functions import WrapLogger
-from inference_algs.distributions import GibbsPosterior
+from inference_algs.distributions import GibbsPosterior, define_prior
 from inference_algs.normflow_assist.mynf import NormalizingFlow
 from inference_algs.normflow_assist import GibbsWrapperNF
 
@@ -127,66 +127,10 @@ def train_normflow(args, logger, save_folder):
     # )
 
     # ------------ 5. Prior ------------
-    if args.cont_type in ['Affine', 'NN']:
-        training_param_names = ['weight', 'bias']
-        prior_dict = {
-            'type':'Gaussian', 'type_w':'Gaussian',
-            'type_b':'Gaussian_biased',
-            'weight_loc':0, 'weight_scale':1,
-            'bias_loc':0, 'bias_scale':5,
-        }
-    else:
-        if args.data_dep_prior:
-            if args.dim_nl==8 and args.dim_internal==8:
-                if args.num_rollouts_prior==5:
-                    filename_load = os.path.join(save_path, 'empirical', 'pretrained', 'trained_controller.pt')
-                    res_dict_loaded = torch.load(filename_load)
-        if args.nominal_prior:
-            res_dict_loaded = []
-            # check the setup is the same as the nominal controllers
-            if args.nn_type=='REN':
-                assert args.dim_nl==8 and args.dim_internal==8, 'No nominal controllers found for REN with the specified dimensions.'
-            elif args.nn_type=='SSM':
-                assert args.dim_internal==8 and args.dim_middle==4 and args.dim_scaffolding==18, 'No nominal controllers found for SSM with the specified dimensions.'
-            # load nominal controllers
-            for _, dirs, _ in os.walk(os.path.join(save_path, 'nominal', args.nn_type)):
-                for dir in dirs:
-                    filename_load = os.path.join(save_path, 'nominal', args.nn_type, dir, 'trained_controller.pt')
-                    tmp_dict = torch.load(filename_load)
-                    if args.nn_type=='SSM':
-                        all_keys = list(tmp_dict.keys())
-                        # remove emme from the beginning of dict keys
-                        for key in all_keys:
-                            tmp_dict[key[5:]] = tmp_dict.pop(key)
-                        # merge real and imaginary parts of B and C
-                        for i in [1,2]:
-                            tmp_dict['ssm'+str(i)+'.lru.B'] = torch.complex(tmp_dict['ssm'+str(i)+'.lru.B_real'], tmp_dict['ssm'+str(i)+'.lru.B_imag'])
-                            tmp_dict['ssm'+str(i)+'.lru.C'] = torch.complex(tmp_dict['ssm'+str(i)+'.lru.C_real'], tmp_dict['ssm'+str(i)+'.lru.C_imag'])
-                            tmp_dict.pop('ssm'+str(i)+'.lru.B_real')
-                            tmp_dict.pop('ssm'+str(i)+'.lru.B_imag')
-                            tmp_dict.pop('ssm'+str(i)+'.lru.C_real')
-                            tmp_dict.pop('ssm'+str(i)+'.lru.C_imag')
-                    res_dict_loaded.append(tmp_dict)
-            # check if any nominal controllers were loaded 
-            if len(res_dict_loaded) == 0:
-                raise ValueError("No nominal controllers found in the specified directory.")
-            logger.info('[INFO] Loaded '+str(len(res_dict_loaded))+' nominal controllers.')
-        prior_dict = {'type':'Gaussian'}
-        for name in ctl_generic.emme.training_param_names:
-            if args.data_dep_prior:
-                prior_dict[name+'_loc'] = res_dict_loaded[name]
-                prior_dict[name+'_scale'] = args.prior_std
-            elif args.nominal_prior:
-                logger.info(
-                    '[INFO] Prior distribution is the distribution over nominal controllers, with std scaled by %.4f.' % args.nominal_prior_std_scale
-                )
-                vals = torch.stack([res[name] for res in res_dict_loaded], dim=0)
-                # val and std computed elementwise. same shape as the training param
-                prior_dict[name+'_loc'] = vals.mean(dim=0)  
-                prior_dict[name+'_scale'] = vals.std(dim=0, correction=1) * args.nominal_prior_std_scale
-            else:
-                prior_dict[name+'_loc'] = 0
-                prior_dict[name+'_scale'] = args.prior_std
+    prior_dict = define_prior(
+        args=args, training_param_names=ctl_generic.emme.training_param_names, 
+        save_path=save_path, logger=logger
+    )
 
     # ------------ 6. Posterior ------------
     # use max lambda s.t. eps/lambda <= thresh
