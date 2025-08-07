@@ -13,7 +13,8 @@ from controllers import PerfBoostController
 from loss_functions import RobotsLossMultiBatch
 from utils.assistive_functions import WrapLogger
 from arg_parser import argument_parser, print_args
-from inference_algs.distributions import GibbsPosterior, define_prior
+from inference_algs.distributions import GibbsPosterior
+from inference_algs.define_prior import define_prior
 from inference_algs.normflow_assist.mynf import NormalizingFlow
 from inference_algs.normflow_assist import GibbsWrapperNF
 from ub_utils import get_mcdim_ub

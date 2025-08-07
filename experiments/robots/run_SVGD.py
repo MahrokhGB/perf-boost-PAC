@@ -14,7 +14,8 @@ from plants import RobotsSystem, RobotsDataset
 from loss_functions import RobotsLossMultiBatch
 from utils.assistive_functions import WrapLogger
 from arg_parser import argument_parser, print_args
-from inference_algs.distributions import GibbsPosterior, define_prior
+from inference_algs.distributions import GibbsPosterior
+from inference_algs.define_prior import define_prior
 from controllers import PerfBoostController, AffineController, NNController, SVGDCont
 
 """

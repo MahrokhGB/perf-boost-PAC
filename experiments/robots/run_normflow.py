@@ -15,7 +15,8 @@ from utils.plot_functions import *
 from controllers import PerfBoostController, AffineController, NNController
 from loss_functions import RobotsLossMultiBatch
 from utils.assistive_functions import WrapLogger
-from inference_algs.distributions import GibbsPosterior, define_prior
+from inference_algs.distributions import GibbsPosterior
+from inference_algs.define_prior import define_prior
 from inference_algs.normflow_assist.mynf import NormalizingFlow
 from inference_algs.normflow_assist import GibbsWrapperNF
 
