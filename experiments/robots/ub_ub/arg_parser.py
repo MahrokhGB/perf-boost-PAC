@@ -1,10 +1,15 @@
-import argparse, math
-from ub_utils import get_max_lambda
+import argparse, math, sys, os
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(1, BASE_DIR)
+
+# from ub_ub.ub_utils import get_max_lambda
 
 # argument parser
 def argument_parser():
     parser = argparse.ArgumentParser(description="Training ren for learning contractive motion through imitation.")
-
+    parser.add_argument('--saved-results-path', type=str, default='', help='Controller type. Can be Affine, NN, or PerfBoost. Default is Affine.')
+    
     # experiment
     parser.add_argument('--random-seed', type=int, default=5, help='Random seed. Default is 5.')
     parser.add_argument('--col-av', type=str2bool, default=True, help='Avoid collisions. Default is True.')
@@ -22,11 +27,32 @@ def argument_parser():
     parser.add_argument('--linearize-plant', type=str2bool, default=False, help='Linearize plant or not. Default is False.')
 
     # controller
-    parser.add_argument('--cont-type', type=str, default='Affine', help='Controller type. Can be Affine, NN, or PerfBoost. Default is Affine.')
-    parser.add_argument('--cont-init-std', type=float, default=0.1 , help='Initialization std for controller params. Default is 0.1.')
+    parser.add_argument('--cont-type', type=str, default='PerfBoost', help='Controller type. Can be Affine, NN, or PerfBoost. Default is PerfBoost.')
+    parser.add_argument('--cont-init-std', type=float, default=None , help='Initialization std for controller params, when using NN controller or PerfBoost with a REN operator. Default is 0.1.')
     # PerfBoost controller
-    parser.add_argument('--dim-internal', type=int, default=8, help='Dimension of the internal state of the controller. Adjusts the size of the linear part of REN. Default is 8.')
-    parser.add_argument('--dim-nl', type=int, default=8, help='size of the non-linear part of REN. Default is 8.')
+    parser.add_argument('--nn-type', type=str, default='SSM',
+                        help='Type of the NN for operator Emme in controller. Options: REN or SSM. Default is REN')
+    parser.add_argument('--dim-internal', type=int, default=8,
+                        help='Dimension of the internal state of the controller. '
+                             'Adjusts the size of the linear part of REN. Default is 8.')
+    parser.add_argument('--output-amplification', type=float, default=1.0,
+                        help='Scaling factor applied to the controller output. Default is 1.0.') # TODO: Note that this used to be 20!
+    # SSM-specific parameters
+    parser.add_argument('--scaffolding-nonlin', type=str, default=None,
+                        help='Type of scaffolding_nonlin in SSMs. Options: MLP, coupling_layers, hamiltonian, tanh. '
+                             'Default coupling_layers.')
+    parser.add_argument('--dim-middle', type=int, default=None,
+                        help='Middle dimension for SSM deep architecture. Default is 4.')
+    parser.add_argument('--dim-scaffolding', type=int, default=None,
+                        help='Dimension of the hidden layers of scaffolding for SSM architecture. Only used for MLP and coupling_layers scaffolding. Default is 6.')
+    parser.add_argument('--rmin', type=float, default=None,
+                        help='Minimum radius for SSM LRU initialization. Default is 0.7.')
+    parser.add_argument('--rmax', type=float, default=None,
+                        help='Maximum radius for SSM LRU initialization. Default is 1.0.')
+    parser.add_argument('--max-phase', type=float, default=None,
+                        help='Maximum phase for SSM LRU initialization. Default is 6.283 (2*pi).')
+    # REN-specific parameters
+    parser.add_argument('--dim-nl', type=int, default=None, help='size of the non-linear part of REN. Default is 8.') 
     # NN controller
     parser.add_argument('--layer-sizes', nargs='+', default=None, help='size of NN controller hidden layers. Default is no hidden layers. use like --layer-sizes 4 4 for 2 hidden layers each with 4 neurons.')
 
@@ -47,7 +73,7 @@ def argument_parser():
     # optimizer - early stopping
     parser.add_argument('--early-stopping', type=str2bool, default=True, help='Stop SGD if validation loss does not significantly decrease.')
     parser.add_argument('--validation-frac', type=float, default=0.25, help='Fraction of data used for validation. Default is 0.25.')
-    parser.add_argument('--n-logs-no-change', type=int, default=5, help='Early stopping if the validation loss does not improve by at least tol percentage during the last n_logs_no_change logged epochs. Default is 5.')
+    parser.add_argument('--n-logs-no-change', type=int, default=10, help='Early stopping if the validation loss does not improve by at least tol percentage during the last n_logs_no_change logged epochs. Default is 10.')
     parser.add_argument('--tol-percentage', type=float, default=0.05, help='Early stopping if the validation loss does not improve by at least tol percentage during the last n_logs_no_change logged epochs. Default is 0.05%.')
     
     # inference
@@ -68,15 +94,27 @@ def argument_parser():
     # inference - Gibbs
     parser.add_argument('--delta', type=float, default=0.1 , help='Delta for Gibbs distribution. PAC bounds hold with prob >= 1- delta. Default is 0.1.')
     parser.add_argument('--gibbs-lambda', type=float, default=-1 , help='Lambda is the tempretaure of the Gibbs distribution. Default is lambda_star when set to -1 (see the paper).')
-    parser.add_argument('--max-gibbs-lambda', type=str2bool, default=False , help='Use max tempretaure for the Gibbs distribution. Default is False.')
+    # parser.add_argument('--max-gibbs-lambda', type=str2bool, default=False , help='Use max tempretaure for the Gibbs distribution. Default is False.')
     # inference - data-dependent prior
     parser.add_argument('--nominal-prior', type=str2bool, default=False, help='Center the prior at a controller learned from nominal noise-free initial conditions. Default is False.')
     parser.add_argument('--nominal-prior-std-scale', type=float, default=50, help='Scaling for the std of the nominal prior. Default is 50.')
     parser.add_argument('--data-dep-prior', type=str2bool, default=False, help='Learn the prior from a subset of data. Default is False.')
     parser.add_argument('--num-rollouts-prior', type=int, default=0, help='Number of rollouts used for training the prior.')
 
+    # hyper-parameter optimization
+    parser.add_argument('--optuna-n-trials', type=int, default=10, help='Number of trials used for hyperparameter optimization with Optuna. Default is 10.')
+    parser.add_argument('--optuna-search-scale', type=float, default=10, help='Set search space for hyperparameter optimization with Optuna to [nominal/scale, nominal*scale]. Default is 10.')
+    parser.add_argument('--optuna-training-method', type=str, default=None, help='Training method for which hyperparameter optimization is performed. Can be empirical, normflow, or SVGD.')
+    
 
     args = parser.parse_args()
+
+    # set defaults for REN and SSM parameters based on the type of the operator
+    if args.cont_type == 'PerfBoost':
+        args = set_ren_ssm_defaults(args)
+    elif args.cont_type == 'NN':
+        if args.cont_init_std is None:
+            args.cont_init_std = 0.1
 
     # set default values that depend on other args
     if args.batch_size==-1:
@@ -99,14 +137,14 @@ def argument_parser():
     if args.gibbs_lambda == -1:
         args.gibbs_lambda = (8*args.num_rollouts*math.log(1/args.delta))**0.5
 
-    # max lambda
-    if args.max_gibbs_lambda:
-        thresh_eps_lambda = 0.2
-        num_prior_samples = 10**6
-        args.gibbs_lambda = get_max_lambda(
-            thresh=thresh_eps_lambda, delta=args.delta, n_p=num_prior_samples, 
-            init_condition=20, loss_bound=args.loss_bound
-        )    #TODO
+    # # max lambda
+    # if args.max_gibbs_lambda:
+    #     thresh_eps_lambda = 0.2
+    #     num_prior_samples = 10**6
+    #     args.gibbs_lambda = get_max_lambda(
+    #         thresh=thresh_eps_lambda, delta=args.delta, n_p=num_prior_samples, 
+    #         init_condition=20, loss_bound=args.loss_bound
+    #     )    #TODO
 
     # assertions and warning
     if not args.col_av:
@@ -144,20 +182,35 @@ def argument_parser():
             print('Warning: nominal_exp is set to True, but batch_size>1. Only one rollout is used for training.')
             args.batch_size = 1
 
+    # # optuna 
+    # assert args.optuna_search_scale > 1, 'optuna search scale must be larger than 1.'
+    # if not args.optuna_training_method is None:
+    #     assert args.optuna_training_method in ['empirical', 'normflow', 'SVGD'], \
+    #         "optuna_training_method must be one of 'empirical', 'normflow', or 'SVGD'."
 
     return args
 
 
 def print_args(args, method='empirical'):
     msg = '\n[INFO] Dataset: n_agents: %i' % args.n_agents + ' -- num_rollouts: %i' % args.num_rollouts
-    msg += ' -- std_ini: %.2f' % args.std_init_plant + ' -- time horizon: %i' % args.horizon
+    msg += ' -- std_ini: %.2f' % args.std_init_plant + ' -- time horizon: %i' % args.horizon + ' -- random seed: %i' % args.random_seed
 
     msg += '\n[INFO] Plant: spring constant: %.2f' % args.spring_const + ' -- use linearized plant: ' + str(args.linearize_plant)
 
-    msg += '\n[INFO] Controller: cont_init_std: %.2f'% args.cont_init_std
+    msg += '\n[INFO] ' + args.cont_type + ' Controller: '
     if args.cont_type=='PerfBoost':
-        msg += ' -- dimension of the internal state: %i' % args.dim_internal
-        msg += ' -- dim_nl: %i' % args.dim_nl
+        msg += '\n[INFO] Controller using %ss: dimension of the internal state: %i' % (args.nn_type, args.dim_internal)
+        msg += ' -- output_amplification: %.1f' % args.output_amplification
+        if args.nn_type == 'REN':
+            msg += ' -- cont_init_std: %.2f' % args.cont_init_std
+            msg += ' -- dim_nl: %i' % args.dim_nl
+        if args.nn_type == 'SSM':
+            msg += ' -- scaffolding_nonlin: %s' % args.scaffolding_nonlin
+            msg += ' -- dim_middle: %i' % args.dim_middle + ' -- dim_scaffolding: %i' % args.dim_scaffolding
+            msg += ' -- rmin: %.2f' % args.rmin + ' -- rmax: %.2f' % args.rmax + ' -- max_phase: %.3f' % args.max_phase
+    elif args.cont_type=='NN':
+        msg += ' -- layer sizes: ' + str(args.layer_sizes) if len(args.layer_sizes)>0 else ' -- no hidden layers'
+        msg += ' -- cont_init_std: %.2f' % args.cont_init_std
 
     msg += '\n[INFO] Loss:  alpha_u: %.6f' % args.alpha_u
     if args.col_av:
@@ -179,13 +232,14 @@ def print_args(args, method='empirical'):
         msg += 'learned from data using %i rollouts' % args.num_rollouts_prior    
         msg +=  '-- prior std: %.2e' % args.prior_std 
     elif args.nominal_prior: 
-        msg += 'based on nominal controllers trained from noise-free initial conditions with different random seeds'
+        msg += 'based on nominal controllers trained from noise-free initial conditions with different random seeds.'
+        msg += ' -- nominal prior std is scaled by: %.2f' % args.nominal_prior_std_scale
     else:
         msg += 'centered at zero -- prior std: %.2e' % args.prior_std
     
     msg += '\n[INFO] Gibbs: delta: %.2e' % args.delta + ' -- gibbs_lambda: %.2f' % args.gibbs_lambda
-    if args.max_gibbs_lambda:
-        msg += ' (max lambda)'
+    # if args.max_gibbs_lambda:
+    #     msg += ' (max lambda)'
 
     # arguments for normflow:
     if method=='normflow':
@@ -208,3 +262,34 @@ def str2bool(v):
         return False
     else:
         raise argparse.ArgumentTypeError('Boolean value expected.')
+    
+        
+def set_ren_ssm_defaults(args):
+    """
+    Set default values for REN and SSM parameters based on the type of controller.
+    """
+    if args.nn_type == 'REN':
+        # set REN defaults
+        args.dim_nl = 8 if args.dim_nl is None else args.dim_nl
+        args.cont_init_std = 0.1 if args.cont_init_std is None else args.cont_init_std
+        # check none of SSM parameters are set
+        assert args.scaffolding_nonlin is None, 'scaffolding_nonlin should not be set for REN.'
+        assert args.dim_middle is None, 'dim_middle should not be set for REN.'
+        assert args.dim_scaffolding is None, 'dim_scaffolding should not be set for REN.'
+        assert args.rmin is None, 'rmin should not be set for REN.'
+        assert args.rmax is None, 'rmax should not be set for REN.'
+        assert args.max_phase is None, 'max_phase should not be set for REN.'
+    elif args.nn_type == 'SSM':
+        # set SSM defaults
+        args.scaffolding_nonlin = 'coupling_layers' if args.scaffolding_nonlin is None else args.scaffolding_nonlin
+        args.dim_middle = 4 if args.dim_middle is None else args.dim_middle
+        args.dim_scaffolding = 6 if args.dim_scaffolding is None else args.dim_scaffolding
+        args.rmin = 0.7 if args.rmin is None else args.rmin
+        args.rmax = 1.0 if args.rmax is None else args.rmax
+        args.max_phase = 6.283 if args.max_phase is None else args.max_phase
+        # check none of REN parameters are set
+        assert args.dim_nl is None, 'dim_nl should not be set for SSM.'
+        assert args.cont_init_std is None, 'cont_init_std should not be set for SSM.'
+    else:
+        raise ValueError('Unknown nn_type: %s' % args.nn_type)
+    return args
