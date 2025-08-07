@@ -7,10 +7,11 @@ from run_SVGD import train_svgd
 from run_normflow import train_normflow
 from utils.assistive_functions import WrapLogger
 
+TUNE_LR = True
+
 def define_tunables(args):
     """Set tunable hyperparameters for the experiment."""
     # hidden_size = trial.suggest_int('hidden_size', 128, 512)
-    # args.lr = trial.suggest_float('lr', args.lr/args.optuna_search_scale, args.lr*args.optuna_search_scale, log=True)
     if method=='empirical':
         if args.nn_type=='REN':
             tunables = [
@@ -35,8 +36,8 @@ def define_tunables(args):
                     'name':'rmin',
                     'nominal':args.rmin,
                     'min':1e-1, 
-                    'max':0.99, 
-                    'log_scale':True
+                    'max':0.9, 
+                    'log_scale':False
                 },
             ]
         else:
@@ -90,6 +91,16 @@ def define_tunables(args):
     else:
         raise ValueError("Method not recognized. Choose from 'empirical', 'SVGD', or 'normflow'.")
     
+    if TUNE_LR:
+        tunables += [
+            {
+                'name':'lr',
+                'nominal':args.lr,
+                'min':1e-4, 
+                'max':1e-2, 
+                'log_scale':True
+            }
+        ]
     return tunables
 
     
