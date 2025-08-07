@@ -42,16 +42,14 @@ class LRU(nn.Module):
         self.theta_log = nn.Parameter(torch.log(max_phase * u2))
         lambda_mod = torch.exp(-torch.exp(self.nu_log))
         self.gamma_log = nn.Parameter(torch.log(torch.sqrt(torch.ones_like(lambda_mod) - torch.square(lambda_mod))))
-        B_re = torch.randn([state_features, in_features]) / math.sqrt(2 * in_features)
-        B_im = torch.randn([state_features, in_features]) / math.sqrt(2 * in_features)
-        self.B = nn.Parameter(torch.complex(B_re, B_im))
-        C_re = torch.randn([out_features, state_features]) / math.sqrt(state_features)
-        C_im = torch.randn([out_features, state_features]) / math.sqrt(state_features)
-        self.C = nn.Parameter(torch.complex(C_re, C_im))
+        self.B_real = nn.Parameter(torch.randn([state_features, in_features]) / math.sqrt(2 * in_features))
+        self.B_imag = nn.Parameter(torch.randn([state_features, in_features]) / math.sqrt(2 * in_features))
+        self.C_real = nn.Parameter(torch.randn([out_features, state_features]) / math.sqrt(state_features))
+        self.C_imag = nn.Parameter(torch.randn([out_features, state_features]) / math.sqrt(state_features))
         # self.state = torch.complex(torch.zeros(state_features), torch.zeros(state_features))
 
         # define trainable params
-        self.training_param_names = ['D', 'nu_log', 'theta_log', 'gamma_log', 'B', 'C']
+        self.training_param_names = ['D', 'nu_log', 'theta_log', 'gamma_log', 'B_real', 'B_imag', 'C_real', 'C_imag']
 
         # initialize internal state
         if internal_state_init is None:
@@ -81,9 +79,11 @@ class LRU(nn.Module):
         lambda_im = lambda_mod * torch.sin(torch.exp(self.theta_log))
         lambda_c = torch.complex(lambda_re, lambda_im)  # A matrix
         gammas = torch.exp(self.gamma_log)
-
-        self.x = lambda_c * self.x + gammas * F.linear(torch.complex(u_in, torch.zeros(1, device=self.B.device)), self.B)
-        y_out = 2 * F.linear(self.x, self.C).real + F.linear(u_in, self.D)
+        self.x = lambda_c * self.x + gammas * F.linear(
+            torch.complex(u_in, torch.zeros(1, device=self.B_real.device)), 
+            torch.complex(self.B_real, self.B_imag)
+            )
+        y_out = 2 * F.linear(self.x, torch.complex(self.C_real, self.C_imag)).real + F.linear(u_in, self.D)
         return y_out
     
     def get_parameters_as_vector(self):
@@ -92,10 +92,16 @@ class LRU(nn.Module):
         """
         vec = None
         for name in self.training_param_names:
+            vec_name = getattr(self, name)
+            if name in ['B', 'C']:
+                vec_name = torch.cat((vec_name.real.flatten(), vec_name.imag.flatten()), 0)
             if vec is None:
-                vec = getattr(self, name).flatten()
+                vec = vec_name.flatten()
             else:
-                vec = torch.cat((vec, getattr(self, name).flatten()), 0)
+                vec = torch.cat((vec, vec_name.flatten()), 0)
+        # TODO: remove sanity checks
+        assert vec.requires_grad and not vec.is_leaf, "The vector of parameters must be a leaf tensor with requires_grad=True"
+        assert vec.dtype == torch.float32, "The vector of parameters must be of type torch.float32"
         return vec
 
 
@@ -197,17 +203,16 @@ class SSM(nn.Module):
         Sets the tensor corresponding to the parameter name.
         """
         if param_name.startswith('lru.'):
-            if param_name[4:] in ['D', 'theta_log', 'nu_log', 'gamma_log']:
-                value = torch.nn.Parameter(value.real)
+            value = torch.nn.Parameter(value)
             setattr(self.lru, param_name[4:], value)
         elif param_name.startswith('scaffold.'):
-            value = torch.nn.Parameter(value.real)
+            value = torch.nn.Parameter(value)
             self.scaffold.set_parameter(param_name[9:], value)
         elif param_name == 'lin.weight':
-            value = torch.nn.Parameter(value.real)
+            value = torch.nn.Parameter(value)
             setattr(self.lin, 'weight', value)
         elif param_name == 'lin.bias':
-            value = torch.nn.Parameter(value.real)
+            value = torch.nn.Parameter(value)
             setattr(self.lin, 'bias', value)
         else:
             raise ValueError(f'Unknown parameter name: {param_name}')

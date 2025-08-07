@@ -158,14 +158,6 @@ def train_svgd(args, logger, save_folder):
                         # remove emme from the beginning of dict keys
                         for key in all_keys:
                             tmp_dict[key[5:]] = tmp_dict.pop(key)
-                        # merge real and imaginary parts of B and C
-                        for i in [1,2]:
-                            tmp_dict['ssm'+str(i)+'.lru.B'] = torch.complex(tmp_dict['ssm'+str(i)+'.lru.B_real'], tmp_dict['ssm'+str(i)+'.lru.B_imag'])
-                            tmp_dict['ssm'+str(i)+'.lru.C'] = torch.complex(tmp_dict['ssm'+str(i)+'.lru.C_real'], tmp_dict['ssm'+str(i)+'.lru.C_imag'])
-                            tmp_dict.pop('ssm'+str(i)+'.lru.B_real')
-                            tmp_dict.pop('ssm'+str(i)+'.lru.B_imag')
-                            tmp_dict.pop('ssm'+str(i)+'.lru.C_real')
-                            tmp_dict.pop('ssm'+str(i)+'.lru.C_imag')
                     res_dict_loaded.append(tmp_dict)
             # check if any nominal controllers were loaded 
             if len(res_dict_loaded) == 0:
