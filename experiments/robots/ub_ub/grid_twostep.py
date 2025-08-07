@@ -158,7 +158,7 @@ plt.savefig(os.path.join(
 # prior for step 1
 prior_dict = define_prior(
     args=args, training_param_names=ctl_generic.emme.training_param_names, 
-    save_path=save_path, logger=logger
+    save_path=save_path_rob, logger=logger
 )
 
 # posteiror for step 1
