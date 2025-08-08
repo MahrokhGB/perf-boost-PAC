@@ -101,8 +101,8 @@ C = bounded_loss_fn.loss_bound
 # ------------ 2. Range for num_rollouts_prior ------------
 # lambda_range = np.linspace(args.gibbs_lambda/10, args.gibbs_lambda*10, 20)
 lambda_range = np.logspace(
-    np.log(args.gibbs_lambda/100), min(np.log(args.gibbs_lambda*10), np.log(500)), 
-    20, base=np.e
+    np.log(args.gibbs_lambda/20), min(np.log(args.gibbs_lambda*10), np.log(500)), 
+    50, base=np.e
 )
 lambda_range = np.round(lambda_range, decimals=4)
 mcdim_terms = dict.fromkeys(

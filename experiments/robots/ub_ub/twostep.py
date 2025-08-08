@@ -1,4 +1,4 @@
-import sys, os, logging, torch, copy
+import sys, os, logging, torch, copy, optuna
 from datetime import datetime
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -27,7 +27,7 @@ def objective(trial):
     _, _, nfm = train_normflow(args_step1, logger, save_folder)
 
     # compute upper bound
-    logger.info('\nComputing the upper bound using '+str(num_prior_samples)+' prior samples.')
+    # logger.info('\nComputing the upper bound using '+str(num_prior_samples)+' prior samples.')
     ub = get_mcdim_ub(
         sys=sys, ctl_generic=ctl_generic, bounded_loss_fn=bounded_loss_fn,
         num_prior_samples=num_prior_samples, delta=args.delta, C=C, deltahat=args.delta,
@@ -61,10 +61,6 @@ logger.info('---------- Two step training ----------\n')
 logger.info(msg)
 torch.manual_seed(args.random_seed)
 num_prior_samples = 10**12   # TODO: move to arg parser
-# usual setup
-BASE_STD_SCALE = 1/args.nominal_prior_std_scale/100 # TODO
-num_samples_nf_train = 100
-num_samples_nf_eval = 100 # TODO
 
 # ------------ 1. Basics ------------
 # Dataset
@@ -126,7 +122,6 @@ bounded_loss_fn = RobotsLossMultiBatch(
 C = bounded_loss_fn.loss_bound
 
 # ------------ 2. Range for num_rollouts_prior ------------
-print('args.num_rollouts', args.num_rollouts)
 num_rollouts_P = np.arange(1, args.num_rollouts, dtype=int)
 num_rollouts_Q = args.num_rollouts*np.ones(args.num_rollouts-1, dtype=int) - num_rollouts_P
 lambdas_P = args.gibbs_lambda * num_rollouts_P / args.num_rollouts
@@ -188,21 +183,20 @@ for lambda_P, lambda_Q, S_P in zip(lambda_P_range, lambda_Q_range, num_rollouts_
     args_step1.num_rollouts = S_P
     args_step1['gibbs_lambda'] = lambda_P
     
-    # tune nominal prior std
-    _, _, nfm = train_normflow(args_step1, logger, save_folder)
-
-    # compute upper bound
-    logger.info('\nComputing the upper bound using '+str(num_prior_samples)+' prior samples.')
-    ub = get_mcdim_ub(
-        sys=sys, ctl_generic=ctl_generic, bounded_loss_fn=bounded_loss_fn,
-        num_prior_samples=num_prior_samples, delta=args.delta, C=C, deltahat=args.delta,
-        batch_size=1000,
-        prior=nfm,                          # the trained nfm is the prior
-        lambda_=lambda_Q,                   # lambda for posterior training
-        train_data=train_data_full[S_P:],   # remove data used for training the prior
-    )
-    logger.info(ub)
-    mcdim_terms.append(ub)
+    # ----- tune nominal prior std with OPTUNA -----
+    logger.info("Starting Hyperparameter Optimization with Optuna")
+    study = optuna.create_study(direction='minimize')
+    # Define the nominal trial
+    nominal_trail = {}
+    nominal_trail['nominal_prior_std_scale'] = args.nominal_prior_std_scale
+    study.enqueue_trial(nominal_trail)
+    # Optimize the study with the objective function
+    study.optimize(objective, n_trials=args.optuna_n_trials)
+    logger.info("Best Hyperparameters:")
+    logger.info(study.best_params)
+    # store the best value of the trial
+    logger.info("Best value of the trial: " + str(study.best_trial.value))
+    mcdim_terms.append(study.best_trial.value)  
 
 
 # divide to different terms
