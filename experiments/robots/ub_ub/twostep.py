@@ -16,15 +16,15 @@ from experiments.robots.run_normflow import train_normflow
 
 # tune nominal prior std
 def objective(trial):
-    args_step1['nominal_prior_std_scale'] = trial.suggest_float(
+    args_step1.nominal_prior_std_scale = trial.suggest_float(
         'nominal_prior_std_scale', 
-        args_step1['nominal_prior_std_scale']/10, 
-        args_step1['nominal_prior_std_scale']*10, 
+        args_step1.nominal_prior_std_scale/10, 
+        args_step1.nominal_prior_std_scale*10, 
         log=True
     )
 
     # train the model
-    _, _, nfm = train_normflow(args_step1, logger, save_folder)
+    _, _, nfm = train_normflow(args_step1, logger, save_path_rob)
 
     # compute upper bound
     # logger.info('\nComputing the upper bound using '+str(num_prior_samples)+' prior samples.')
@@ -181,7 +181,7 @@ for lambda_P, lambda_Q, S_P in zip(lambda_P_range, lambda_Q_range, num_rollouts_
     logger.info('\n\n------ Training prior using '+str(S_P)+' rollouts ------')
     args_step1 = copy.deepcopy(args)
     args_step1.num_rollouts = S_P
-    args_step1['gibbs_lambda'] = lambda_P
+    args_step1.gibbs_lambda = lambda_P
     
     # ----- tune nominal prior std with OPTUNA -----
     logger.info("Starting Hyperparameter Optimization with Optuna")

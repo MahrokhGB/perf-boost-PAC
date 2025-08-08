@@ -266,6 +266,9 @@ res_normflow = [
 
 
 
+# upper bound
+# REN. select Gibbs lambda to have a small constant in the upper bound, then tune nominal prior std and N_p for tightest bound
+# python3 Simulations/perf-boost-PAC/experiments/robots/ub_ub/twostep.py --num-rollouts 32 --batch-size 32 --cont-type PerfBoost --epochs 5000 --log-epoch 50 --lr 5e-4 --base-is-prior True --nominal-prior True --nominal-prior-std-scale 58.93082020462471 --flow-activation tanh --delta 0.1 --nn-type REN --random-seed 500 --gibbs-lambda 13.2455
 
 
 
@@ -274,101 +277,6 @@ res_normflow = [
 
 
 
-
-
-
-# res = [
-#      {
-#         'num_rollouts':8,
-#         'nominal_prior_std_scale':,
-#         'Bounded train loss':, 
-#         'original train loss':,
-#         'train num collisions':,
-#         'bounded test loss':, 
-#         'original test loss':, 
-#         'test num collisions': 
-#     },
-#      {
-#         'num_rollouts':16,
-#         'nominal_prior_std_scale':,
-#         'Bounded train loss':, 
-#         'original train loss':,
-#         'train num collisions':,
-#         'bounded test loss':, 
-#         'original test loss':, 
-#         'test num collisions': 
-#     },
-#      {
-#         'num_rollouts':,
-#         'nominal_prior_std_scale':,
-#         'Bounded train loss':, 
-#         'original train loss':,
-#         'train num collisions':,
-#         'bounded test loss':, 
-#         'original test loss':, 
-#         'test num collisions': 
-#     },
-#     {
-#         'num_rollouts':64,
-#         'nominal_prior_std_scale':,
-#         'Bounded train loss':, 
-#         'original train loss':,
-#         'train num collisions':,
-#         'bounded test loss':, 
-#         'original test loss':, 
-#         'test num collisions': 
-#     },
-#     {
-#         'num_rollouts':128,
-#         'nominal_prior_std_scale':,
-#         'Bounded train loss':, 
-#         'original train loss':,
-#         'train num collisions':,
-#         'bounded test loss':, 
-#         'original test loss':, 
-#         'test num collisions':
-#     },
-#     {
-#         'num_rollouts':256,
-#         'nominal_prior_std_scale':,
-#         'Bounded train loss':, 
-#         'original train loss':,
-#         'train num collisions':,
-#         'bounded test loss':, 
-#         'original test loss':, 
-#         'test num collisions':
-#     },
-#      {
-#         'num_rollouts':512,
-#         'nominal_prior_std_scale':,
-#         'Bounded train loss':, 
-#         'original train loss':,
-#         'train num collisions':,
-#         'bounded test loss':, 
-#         'original test loss':, 
-#         'test num collisions': 
-#     },
-#      {
-#         'num_rollouts':,
-#         'nominal_prior_std_scale':,
-#         'Bounded train loss':, 
-#         'original train loss':,
-#         'train num collisions':,
-#         'bounded test loss':, 
-#         'original test loss':, 
-#         'test num collisions':
-#     },
-#     #  {
-#     #     'num_rollouts':2048,
-#     #     'nominal_prior_std_scale':,
-#     #     'Bounded train loss': , 
-#     #     'original train loss':,
-#     #     'train num collisions': ,
-#     #     'bounded test loss': , 
-#     #     'original test loss': , 
-#     #     'test num collisions': 
-#     # },
-# ]
 
 
 import matplotlib.pyplot as plt, sys, os
