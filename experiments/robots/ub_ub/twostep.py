@@ -1,7 +1,5 @@
-import sys, os, logging, torch, math
+import sys, os, logging, torch, copy
 from datetime import datetime
-from torch.utils.data import DataLoader
-import normflows as nf
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 sys.path.insert(1, BASE_DIR)
@@ -13,12 +11,36 @@ from controllers import PerfBoostController
 from loss_functions import RobotsLossMultiBatch
 from utils.assistive_functions import WrapLogger
 from arg_parser import argument_parser, print_args
-from inference_algs.distributions import GibbsPosterior
-from inference_algs.define_prior import define_prior
-from inference_algs.normflow_assist.mynf import NormalizingFlow
-from inference_algs.normflow_assist import GibbsWrapperNF
 from ub_utils import get_mcdim_ub
-from inference_algs.normflow_assist import fit_norm_flow
+from experiments.robots.run_normflow import train_normflow
+
+# tune nominal prior std
+def objective(trial):
+    args_step1['nominal_prior_std_scale'] = trial.suggest_float(
+        'nominal_prior_std_scale', 
+        args_step1['nominal_prior_std_scale']/10, 
+        args_step1['nominal_prior_std_scale']*10, 
+        log=True
+    )
+
+    # train the model
+    _, _, nfm = train_normflow(args_step1, logger, save_folder)
+
+    # compute upper bound
+    logger.info('\nComputing the upper bound using '+str(num_prior_samples)+' prior samples.')
+    ub = get_mcdim_ub(
+        sys=sys, ctl_generic=ctl_generic, bounded_loss_fn=bounded_loss_fn,
+        num_prior_samples=num_prior_samples, delta=args.delta, C=C, deltahat=args.delta,
+        batch_size=1000,
+        prior=nfm,                          # the trained nfm is the prior
+        lambda_=lambda_Q,                   # lambda for posterior training
+        train_data=train_data_full[S_P:],   # remove data used for training the prior
+    )
+
+    return ub['tot']  # return the total upper bound value
+
+
+
 
 # ----- parse and set experiment arguments -----
 args = argument_parser()
@@ -50,11 +72,6 @@ dataset = RobotsDataset(random_seed=args.random_seed, horizon=args.horizon, std_
 # divide to train and test
 train_data_full, test_data = dataset.get_data(num_train_samples=args.num_rollouts, num_test_samples=500)
 train_data_full, test_data = train_data_full.to(device), test_data.to(device)
-# data for plots
-t_ext = args.horizon * 4
-plot_data = torch.zeros(1, t_ext, train_data_full.shape[-1], device=device)
-plot_data[:, 0, :] = (dataset.x0.detach() - dataset.xbar)
-plot_data = plot_data.to(device)
 
 # Plant
 plant_input_init = None     # all zero
@@ -164,114 +181,15 @@ print('min_ind', min_ind,
     )
 
 # ------------ 3. Train step 1 ------------
-# prior for step 1
-prior_dict = define_prior(
-        args=args, training_param_names=ctl_generic.emme.training_param_names, 
-        save_path=save_path_rob, logger=logger
-    )
-
-# posterior for step 1
 mcdim_terms = []
 for lambda_P, lambda_Q, S_P in zip(lambda_P_range, lambda_Q_range, num_rollouts_P_range):
     logger.info('\n\n------ Training prior using '+str(S_P)+' rollouts ------')
-    ctl_generic.reset()
-    ctl_generic.emme.hard_reset()
-    # train data for prior
-    train_data_P = train_data_full[:S_P, :]
-    train_dataloader_P = DataLoader(train_data_P, batch_size=min(int(S_P), 256), shuffle=False)
-    # define target distribution
-    gibbs_posteior = GibbsPosterior(
-        loss_fn=bounded_loss_fn, lambda_=lambda_P,
-        prior_dict=prior_dict, controller=ctl_generic,
-        sys=sys, logger=logger,
-    )
-    # Wrap Gibbs distribution to be used in normflows
-    target = GibbsWrapperNF(
-        target_dist=gibbs_posteior, train_dataloader=train_dataloader_P,
-        prop_scale=torch.tensor(6.0), prop_shift=torch.tensor(-3.0)
-    )
-    # ------------ Define the nfm model ------------
-    # flows
-    flows = []
-    for i in range(args.num_flows):
-        if args.flow_type == 'Radial':
-            flows += [nf.flows.Radial((num_params,), act=args.flow_activation)]
-        elif args.flow_type == 'Planar': # f(z) = z + u * h(w * z + b)
-            '''
-            Default values:
-                - u: uniform(-sqrt(2), sqrt(2))
-                - w: uniform(-sqrt(2/num_prams), sqrt(2/num_prams))
-                - b: 0
-                - h: args.flow_activation (tanh or leaky_relu)
-            '''
-            flows += [nf.flows.Planar((num_params,), u=args.planar_flow_scale*(2*torch.rand(num_params)-1), act=args.flow_activation)]
-        elif args.flow_type == 'NVP':
-            # Neural network with two hidden layers having 64 units each
-            # Last layer is initialized by zeros making training more stable
-            param_map = nf.nets.MLP([math.ceil(num_params/2), 64, 64, num_params], init_zeros=True, act=args.flow_activation)
-            # Add flow layer
-            flows.append(nf.flows.AffineCouplingBlock(param_map))
-            # Swap dimensions
-            flows.append(nf.flows.Permute(2, mode='swap'))
-        else:
-            raise NotImplementedError
-
-    # base distribution
-    q0 = nf.distributions.DiagGaussian(num_params, trainable=args.learn_base)
-    # base distribution same as the prior
-    if args.base_is_prior:
-        logger.info('[INFO] Base distribution is similar to the prior, with std scaled by %.4f.' % BASE_STD_SCALE)
-        state_dict = q0.state_dict()
-        state_dict['loc'] = gibbs_posteior.prior.mean().reshape(1, -1)
-        state_dict['log_scale'] = torch.log(gibbs_posteior.prior.stddev().reshape(1, -1)*BASE_STD_SCALE) 
-        q0.load_state_dict(state_dict)
-    # base distribution centered at the empirical or nominal controller
-    elif args.base_center_emp or args.base_center_nominal:
-        # get filename to load
-        if args.base_center_emp:
-            if args.dim_nl==1 and args.dim_internal==1:
-                filename_load = os.path.join(save_path_rob, 'empirical', 'PerfBoost_08_29_14_58_13', 'trained_controller.pt')
-            elif args.dim_nl==2 and args.dim_internal==4:
-                filename_load = os.path.join(save_path_rob, 'empirical', 'PerfBoost_08_29_14_57_38', 'trained_controller.pt')
-            elif args.dim_nl==8 and args.dim_internal==8:
-                # # empirical controller avoids collisions
-                # filename_load = os.path.join(save_path_rob, 'empirical', 'PerfBoost_01_14_16_26_11', 'trained_controller.pt')
-                # empirical controller does not avoid collisions
-                filename_load = os.path.join(save_path_rob, 'empirical', 'PerfBoost_01_19_11_31_25', 'trained_controller.pt')
-        if args.base_center_nominal:
-            if args.dim_nl==8 and args.dim_internal==8:
-                filename_load = os.path.join(save_path_rob, 'nominal', 'PerfBoost_01_22_15_25_52', 'trained_controller.pt')
-        # load the controller
-        res_dict_loaded = torch.load(filename_load)
-        # set the mean of the base distribution to the controller
-        mean = np.array([])
-        for name in training_param_names:
-            mean = np.append(mean, res_dict_loaded[name].cpu().detach().numpy().flatten())
-        state_dict = q0.state_dict()
-        state_dict['loc'] = torch.Tensor(mean.reshape(1, -1))
-        # set the scale of the base distribution
-        # state_dict['log_scale'] = state_dict['log_scale'] - 100 # TODO
-        state_dict['log_scale'] = torch.log(torch.abs(state_dict['loc'])*BASE_STD_SCALE)
-        q0.load_state_dict(state_dict)
-    else:
-        state_dict = q0.state_dict()
-        state_dict['log_scale'] = torch.log(torch.abs(state_dict['loc'])*BASE_STD_SCALE)
-        q0.load_state_dict(state_dict)
-
-    # set up normflow
-    nfm = NormalizingFlow(q0=q0, flows=flows, p=target) # NOTE: set back to nf.NormalizingFlow
-    nfm.to(device)  # Move model on GPU if available
-
-    # train nfm
-    optimizer = torch.optim.Adam(nfm.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    fit_norm_flow(
-        nfm=nfm, sys=sys, ctl_generic=ctl_generic, logger=logger, loss_fn=bounded_loss_fn,
-        save_folder=save_folder, train_data_full=train_data_P, test_data=test_data, plot_data=plot_data,
-        return_best=args.return_best, validation_frac=args.validation_frac,
-        early_stopping=args.early_stopping, n_logs_no_change=args.n_logs_no_change, tol_percentage=args.tol_percentage,
-        optimizer=optimizer, epochs=args.epochs, log_epoch=args.log_epoch, annealing=args.annealing,
-        anneal_iter=args.anneal_iter, num_samples_nf_train=num_samples_nf_train, num_samples_nf_eval=num_samples_nf_eval,
-    )
+    args_step1 = copy.deepcopy(args)
+    args_step1.num_rollouts = S_P
+    args_step1['gibbs_lambda'] = lambda_P
+    
+    # tune nominal prior std
+    _, _, nfm = train_normflow(args_step1, logger, save_folder)
 
     # compute upper bound
     logger.info('\nComputing the upper bound using '+str(num_prior_samples)+' prior samples.')

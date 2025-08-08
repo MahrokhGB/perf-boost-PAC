@@ -221,7 +221,7 @@ def train_normflow(args, logger, save_folder):
         res_dict_loaded = torch.load(filename_load)
         # set the mean of the base distribution to the controller
         mean = np.array([])
-        for name in training_param_names:
+        for name in ctl_generic.emme.training_param_names:
             mean = np.append(mean, res_dict_loaded[name].cpu().detach().numpy().flatten())
         state_dict = q0.state_dict()
         state_dict['loc'] = torch.Tensor(mean.reshape(1, -1))
@@ -249,7 +249,7 @@ def train_normflow(args, logger, save_folder):
         anneal_iter=args.anneal_iter, num_samples_nf_train=num_samples_nf_train, num_samples_nf_eval=num_samples_nf_eval,
     )
 
-    return res_dict, filename_save
+    return res_dict, filename_save, nfm
 
 
 

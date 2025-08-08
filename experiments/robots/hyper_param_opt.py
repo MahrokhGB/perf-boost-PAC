@@ -1,3 +1,4 @@
+from asyncio.log import logger
 import optuna, sys, os, logging
 from datetime import datetime
 
@@ -8,6 +9,7 @@ from run_normflow import train_normflow
 from utils.assistive_functions import WrapLogger
 
 TUNE_LR = True
+RANDOM_SEEDS = [500, 0, 5, 412, 719]
 
 def define_tunables(args):
     """Set tunable hyperparameters for the experiment."""
@@ -115,22 +117,40 @@ def objective(trial):
             log=tunable.get('log_scale', False)
         ))
     
-    # get training loss
-    if method=='empirical':
-        res_dict, _ = train_emp(args, logger, save_folder)
-    elif method=='SVGD':
-        res_dict, _ = train_svgd(args, logger, save_folder)
-    elif method=='normflow':
-        res_dict, _ = train_normflow(args, logger, save_folder)
+    # iterate over random seeds
+    loss_diff_seeds = []
+    for seed in RANDOM_SEEDS:
+        args.random_seed = seed
+        logger.info(f"Trial {trial.number}, Seed {seed}")
+        
+        # train the model
+        if method=='empirical':
+            res_dict, _ = train_emp(args, logger, save_folder)
+        elif method=='SVGD':
+            res_dict, _ = train_svgd(args, logger, save_folder)
+        elif method=='normflow':
+            res_dict, _, _ = train_normflow(args, logger, save_folder)
+        else:
+            raise ValueError("Method not recognized. Choose from 'empirical', 'SVGD', or 'normflow'.")
+        
+        # get the training loss
+        if 'train_loss' in res_dict:
+            loss_diff_seeds.append(res_dict['train_loss'])
+        elif 'bounded_train_loss' in res_dict:
+            loss_diff_seeds.append(res_dict['bounded_train_loss'])
+        elif 'original_train_loss' in res_dict:
+            loss_diff_seeds.append(res_dict['original_train_loss'])
+        else:
+            raise ValueError("No training loss found in the result dictionary.")
+        
+        # log the training loss
+        logger.info(f"Trial {trial.number}, Seed {seed}: Training loss: {loss_diff_seeds[-1]}")
 
-    if 'train_loss' in res_dict:
-        return res_dict['train_loss']
-    elif 'bounded_train_loss' in res_dict:
-        return res_dict['bounded_train_loss']
-    elif 'original_train_loss' in res_dict:
-        return res_dict['original_train_loss']
-    else:
-        raise ValueError("No training loss found in the result dictionary.")
+    # return the average loss across seeds
+    avg_loss = sum(loss_diff_seeds) / len(loss_diff_seeds)
+    logger.info(f"Trial {trial.number}: Average training loss across seeds: {avg_loss}")
+    return avg_loss
+
 
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
