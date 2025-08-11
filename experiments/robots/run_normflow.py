@@ -53,7 +53,6 @@ def train_normflow(args, logger, save_folder):
     plot_data = plot_data.to(device)
     # batch the data
     # NOTE: for normflow, must use all the data at each iter b.c. otherwise, the target distribution changes.
-    print('\n\n\nnum_train_rollouts', num_train_rollouts, num_train_rollouts.dtype, min(num_train_rollouts, 256), min(num_train_rollouts, 256).dtype)
     train_dataloader = DataLoader(train_data, batch_size=int(min(num_train_rollouts, 256)), shuffle=False)
 
     # ------------ 2. Plant ------------

@@ -95,6 +95,11 @@ res_SVGD = [
 
 # -----------------------------------------------------
 # -----------------------------------------------------
+# nominal
+# --------- SSM ---------
+# python3 Simulations/perf-boost-PAC/experiments/robots/run_emp.py --nominal-exp True --num-rollouts 1 --cont-type PerfBoost --epochs 5000 --log-epoch 50 --n-logs-no-change 10 --nn-type SSM --rmin 0.78 --lr 2e-4 --random-seed 500 
+
+# -----------------------------------------------------
 # SVGD - 1 particle - 32 rollouts - using the best nominal_prior_std_scale - change seed
 # --------- REN ---------
 # python3 Simulations/perf-boost-PAC/experiments/robots/run_SVGD.py --num-rollouts 32 --batch-size 32 --cont-type PerfBoost --epochs 5000 --log-epoch 50 --early-stopping True --nominal-prior True --delta 0.1 --num-particles 1 --lr 5e-4 --nominal-prior-std-scale 39.546884104715836 --random-seed 0

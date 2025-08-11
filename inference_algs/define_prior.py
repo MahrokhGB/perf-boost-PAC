@@ -44,7 +44,7 @@ def define_prior(args, training_param_names, save_path, logger):
             # load nominal controllers
             for _, dirs, _ in os.walk(os.path.join(save_path, 'nominal', args.nn_type, setup_name)):
                 for dir in dirs:
-                    filename_load = os.path.join(save_path, 'nominal', args.nn_type, dir, 'trained_controller.pt')
+                    filename_load = os.path.join(save_path, 'nominal', args.nn_type, setup_name, dir, 'trained_controller.pt')
                     tmp_dict = torch.load(filename_load)
                     if args.nn_type=='SSM':
                         all_keys = list(tmp_dict.keys())
