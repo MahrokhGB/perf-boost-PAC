@@ -126,7 +126,8 @@ res_emp_REN_32_rollouts = {
     'test num collisions':[43, 11, 166, 14, 425]
 }
 # --------- SSM ---------
-# python3 Simulations/perf-boost-PAC/experiments/robots/run_emp.py --num-rollouts 32 --batch-size 32 --cont-type PerfBoost --nn-type SSM --epochs 5000 --log-epoch 50 --early-stopping True --lr 5e-4 --rmin 0.7 --random-seed 500
+# tuned lr and rmin = 2e-4, 0.87
+# python3 Simulations/perf-boost-PAC/experiments/robots/run_emp.py --num-rollouts 32 --batch-size 32 --cont-type PerfBoost --nn-type SSM --epochs 5000 --log-epoch 50 --early-stopping True --lr 2e-4 --rmin 0.87 --random-seed 500
 res_emp_SSM_32_rollouts = {
     'num_rollouts': 32,
     'Bounded train loss': [0.0840, 0.1259, 0.0901, 0.0897, 0.0909],

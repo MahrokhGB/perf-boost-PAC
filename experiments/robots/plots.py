@@ -1,8 +1,6 @@
-import sys, os, logging, torch, math
+import sys, os, torch
 import normflows as nf
 import matplotlib.pyplot as plt
-from matplotlib.lines import Line2D
-import numpy as np
 import pandas as pd
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -13,26 +11,15 @@ from plants import RobotsSystem, RobotsDataset
 from utils.plot_functions import *
 from controllers import PerfBoostController
 from loss_functions import RobotsLossMultiBatch
-from utils.assistive_functions import WrapLogger
-from inference_algs.distributions import GibbsPosterior
 from inference_algs.normflow_assist.mynf import NormalizingFlow
-from inference_algs.normflow_assist import GibbsWrapperNF, eval_norm_flow
+from inference_algs.normflow_assist import eval_norm_flow
 
 
 def load_nfm(load_path):
     # ----- Load setup -----
     setup_dict = torch.load(os.path.join(load_path, 'setup'))
     trained_nfm = torch.load(os.path.join(load_path, 'trained_nfm'))
-    print(trained_nfm.keys())
-    
-
-    # ----- SET UP LOGGER -----
-    save_path = os.path.join(BASE_DIR, 'experiments', 'robots', 'saved_results')
-    logger = WrapLogger(None)
-
-    logger.info('---------- Plotting ----------\n')
     torch.manual_seed(setup_dict['random_seed'])
-
 
     # ------------ 1. Basics ------------
     # Dataset
@@ -59,7 +46,7 @@ def load_nfm(load_path):
         output_amplification=20, train_method='normflow'
     ).to(device)
     num_params = ctl_generic.num_params
-    logger.info('[INFO] Controller is of type ' + setup_dict['cont_type'] + ' and has %i parameters.' % num_params)
+    # print('[INFO] Controller is of type ' + setup_dict['cont_type'] + ' and has %i parameters.' % num_params)
 
     # Loss
     Q = torch.kron(torch.eye(setup_dict['n_agents']), torch.eye(4)).to(device)   # TODO: move to args and print info
@@ -68,7 +55,6 @@ def load_nfm(load_path):
     sat_bound += 0 if setup_dict['alpha_col'] is None else setup_dict['alpha_col']
     sat_bound += 0 if setup_dict['alpha_obst'] is None else setup_dict['alpha_obst']
     sat_bound = sat_bound/20
-    logger.info('Loss saturates at: '+str(sat_bound))
     bounded_loss_fn = RobotsLossMultiBatch(
         Q=Q, alpha_u=setup_dict['alpha_u'], xbar=dataset.xbar,
         loss_bound=setup_dict['loss_bound'], sat_bound=sat_bound.to(device),
@@ -76,66 +62,6 @@ def load_nfm(load_path):
         min_dist=setup_dict['min_dist'] if setup_dict['col_av'] else None,
         n_agents=sys.n_agents if setup_dict['col_av'] else None,
     )
-    C = bounded_loss_fn.loss_bound
-
-    # Prior
-    if setup_dict['cont_type'] in ['Affine', 'NN']:
-        training_param_names = ['weight', 'bias']
-        prior_dict = {
-            'type':'Gaussian', 'type_w':'Gaussian',
-            'type_b':'Gaussian_biased',
-            'weight_loc':0, 'weight_scale':1,
-            'bias_loc':0, 'bias_scale':5,
-        }
-    else:
-        if setup_dict['data_dep_prior']:
-            if setup_dict['dim_nl']==8 and setup_dict['dim_internal']==8:
-                if setup_dict['num_rollouts_prior']==5:
-                    filename_load = os.path.join(save_path, 'empirical', 'pretrained', 'trained_controller.pt')
-                    res_dict_loaded = torch.load(filename_load)
-        if setup_dict['nominal_prior']:
-            res_dict_loaded = []
-            if setup_dict['dim_nl']==8 and setup_dict['dim_internal']==8:
-                for _, dirs, _ in os.walk(os.path.join(save_path, 'nominal')):
-                    for dir in dirs:
-                        filename_load = os.path.join(save_path, 'nominal', dir, 'trained_controller.pt')
-                        res_dict_loaded.append(torch.load(filename_load))
-            logger.info('[INFO] Loaded '+str(len(res_dict_loaded))+' nominal controllers.')
-        prior_dict = {'type':'Gaussian'}
-        training_param_names = ['X', 'Y', 'B2', 'C2', 'D21', 'D22', 'D12']
-        for name in training_param_names:
-            if setup_dict['data_dep_prior']:
-                prior_dict[name+'_loc'] = res_dict_loaded[name]
-                prior_dict[name+'_scale'] = setup_dict['prior_std']
-            elif setup_dict['nominal_prior']:
-                logger.info(
-                    '[INFO] Prior distribution is the distribution over nominal controllers, with std scaled by %.4f.' % setup_dict['nominal_prior_std_scale']
-                )
-                vals = torch.stack([res[name] for res in res_dict_loaded], dim=0)
-                # val and std computed elementwise. same shape as the training param
-                prior_dict[name+'_loc'] = vals.mean(dim=0)  
-                prior_dict[name+'_scale'] = vals.std(dim=0, correction=1) * setup_dict['nominal_prior_std_scale']
-            else:
-                prior_dict[name+'_loc'] = 0
-                prior_dict[name+'_scale'] = setup_dict['prior_std']
-
-    # Posterior
-    gibbs_posteior = GibbsPosterior(
-        loss_fn=bounded_loss_fn,
-        lambda_=setup_dict['gibbs_lambda'],
-        prior_dict=prior_dict,
-        # attributes of the CL system
-        controller=ctl_generic, sys=sys,
-        # misc
-        logger=logger,
-    )
-
-    # Wrap Gibbs distribution to be used in normflows
-    target = None
-    # GibbsWrapperNF(
-    #     target_dist=gibbs_posteior, train_dataloader=train_dataloader,
-    #     prop_scale=trained_nfm['prop_scale'], prop_shift=trained_nfm['prop_shift']
-    # )
 
     # ------------ load NormFlows ------------
     flows = []
@@ -179,6 +105,7 @@ def load_nfm(load_path):
     q0.log_scale = trained_nfm['q0.log_scale']
 
     # set up normflow
+    target = None
     nfm = NormalizingFlow(q0=q0, flows=flows, p=target) # NOTE: set back to nf.NormalizingFlow
     nfm.to(device)  # Move model on GPU if available
 
@@ -230,12 +157,11 @@ ind = 0
 
 
 # ------ loop over setups ------
-save_path = os.path.join(BASE_DIR, 'experiments', 'robots', 'saved_results')
 filenames = ['PerfBoost_06_02_10_03_08']
 
 for filename in filenames:
     print('filename', filename)
-    load_path = save_path = os.path.join(BASE_DIR, 'experiments', 'robots', 'saved_results', 'normflow', filename)
+    load_path = os.path.join(BASE_DIR, 'experiments', 'robots', 'saved_results', 'normflow', filename)
     nfm, sys, ctl_generic, bounded_loss_fn, train_data_full, test_data = load_nfm(load_path)
     z, _ = nfm.sample(num_sampled_controllers)
     z_mean = torch.mean(z, axis=0)

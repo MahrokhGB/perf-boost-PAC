@@ -35,13 +35,14 @@ def define_prior(args, training_param_names, save_path, logger):
                     res_dict_loaded = torch.load(filename_load)
         if args.nominal_prior:
             res_dict_loaded = []
-            # check the setup is the same as the nominal controllers
-            if args.nn_type=='REN':
-                assert args.dim_nl==8 and args.dim_internal==8, 'No nominal controllers found for REN with the specified dimensions.'
-            elif args.nn_type=='SSM':
-                assert args.dim_internal==8 and args.dim_middle==4 and args.dim_scaffolding==18, 'No nominal controllers found for SSM with the specified dimensions.'
+            # define setup name
+            setup_name ='internal' + str(args.dim_internal)
+            if args.nn_type == 'REN':
+                setup_name += '_nl' + str(args.dim_nl)
+            elif args.nn_type == 'SSM':
+                setup_name += '_middle' + str(args.dim_middle) + '_scaffolding' + str(args.dim_scaffolding)
             # load nominal controllers
-            for _, dirs, _ in os.walk(os.path.join(save_path, 'nominal', args.nn_type)):
+            for _, dirs, _ in os.walk(os.path.join(save_path, 'nominal', args.nn_type, setup_name)):
                 for dir in dirs:
                     filename_load = os.path.join(save_path, 'nominal', args.nn_type, dir, 'trained_controller.pt')
                     tmp_dict = torch.load(filename_load)
