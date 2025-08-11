@@ -7,7 +7,10 @@ class batched_linear_layer(torch.nn.Linear):
 
     def forward(self, input):
         assert not input.isinf().any()
-        return torch.matmul(input, self.weight.transpose(-1,-2)) + self.bias.unsqueeze(dim=-2)
+        if not self.bias is None:
+            return torch.matmul(input, self.weight.transpose(-1,-2)) + self.bias.unsqueeze(dim=-2)
+        else:
+            return torch.matmul(input, self.weight.transpose(-1,-2))
 
 
 class NNController(torch.nn.Module):
