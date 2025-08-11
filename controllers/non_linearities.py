@@ -89,8 +89,20 @@ class HamiltonianSIE(nn.Module):
         # x = x0.clone()
         p, q = torch.split(x0.clone(), [self.half_state_dim, self.half_state_dim], dim=2)
         for j in range(ini, end):
-            p = p - self.h * F.linear(self.act(F.linear(q, self.k2[j].transpose(0,1)) + self.b1[j]), self.k2[j])
-            q = q + self.h * F.linear(self.act(F.linear(p, self.k1[j].transpose(0,1)) + self.b2[j]), self.k1[j])
+            p = p - self.h * torch.matmul(
+                self.act(torch.matmul(
+                    q, 
+                    self.k2[j].transpose(-1, -2)
+                ) + self.b1[j]), 
+                self.k2[j].transpose(-1, -2)
+            )
+            q = q + self.h * torch.matmul(
+                self.act(torch.matmul(
+                    p, 
+                    self.k1[j].transpose(-1, -2)
+                ) + self.b2[j]), 
+                self.k1[j].transpose(-1, -2)
+            )
         x = torch.cat([p, q], dim=2)
         return x
     

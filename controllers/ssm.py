@@ -85,11 +85,17 @@ class LRU(nn.Module):
             'B real', self.B_real.shape,
             'B comp', torch.complex(self.B_real, self.B_imag).shape)
         exit()
-        self.x = lambda_c * self.x + gammas * F.linear(
+        self.x = lambda_c * self.x + gammas * torch.matmul(
             torch.complex(u_in, torch.zeros(1, device=self.B_real.device)), 
-            torch.complex(self.B_real, self.B_imag)
+            torch.complex(self.B_real, self.B_imag).transpose(-1,-2)
             )
-        y_out = 2 * F.linear(self.x, torch.complex(self.C_real, self.C_imag)).real + F.linear(u_in, self.D)
+        y_out = 2 * torch.matmul(
+            self.x, 
+            torch.complex(self.C_real, self.C_imag).transpose(-1, -2)
+        ).real + torch.matmul(
+            u_in, 
+            self.D.transpose(-1, -2)
+        )
         return y_out
     
     def get_parameters_as_vector(self):
