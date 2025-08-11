@@ -73,25 +73,22 @@ class LRU(nn.Module):
             y_out (torch.Tensor): Output with (batch_size, 1, self.dim_out).
         """
         batch_size = u_in.shape[0]
+        if len(u_in.shape) > 2:
+            if len(self.x.shape) != len(u_in.shape)-1:
+                self.x = self.x.repeat(*u_in.shape[:-2], 1)
 
         lambda_mod = torch.exp(-torch.exp(self.nu_log))
         lambda_re = lambda_mod * torch.cos(torch.exp(self.theta_log))
         lambda_im = lambda_mod * torch.sin(torch.exp(self.theta_log))
         lambda_c = torch.complex(lambda_re, lambda_im)  # A matrix
         gammas = torch.exp(self.gamma_log)
-        # print(
-        #     'u_in', u_in.shape,
-        #     'u_in comp', torch.complex(u_in, torch.zeros(1, device=self.B_real.device)).shape,
-        #     'B real', self.B_real.shape,
-        #     'B comp', torch.complex(self.B_real, self.B_imag).shape)
-        # exit()
         self.x = lambda_c * self.x + gammas * torch.matmul(
             torch.complex(u_in, torch.zeros(1, device=self.B_real.device)), 
             torch.complex(self.B_real, self.B_imag).transpose(-1,-2)
-            )
+            ).squeeze(-2)
         y_out = 2 * torch.matmul(
-            self.x, 
-            torch.complex(self.C_real, self.C_imag).transpose(-1, -2)
+            self.x.unsqueeze(-2), 
+            torch.complex(self.C_real, self.C_imag).unsqueeze(0).transpose(-1, -2)
         ).real + torch.matmul(
             u_in, 
             self.D.transpose(-1, -2)
@@ -172,9 +169,13 @@ class SSM(nn.Module):
         return param_dict
 
     def get_parameter_shapes(self):
-        param_dict = OrderedDict(
-            (name, self.state_dict()[name].shape) for name in self.training_param_names
-        )
+        param_dict = OrderedDict()
+        for name in self.training_param_names:
+            param_shape = self.state_dict()[name].shape
+            # remove batch size
+            if len(param_shape) >2:
+                param_shape = param_shape[1:]
+                param_dict[name] = param_shape
         return param_dict
     
     def extract_param_names(self):
@@ -280,9 +281,13 @@ class DeepSSM(nn.Module):
 
     # setters and getters
     def get_parameter_shapes(self):
-        param_dict = OrderedDict(
-            (name, self.state_dict()[name].shape) for name in self.training_param_names
-        )
+        param_dict = OrderedDict()
+        for name in self.training_param_names:
+            param_shape = self.state_dict()[name].shape
+            # remove batch size
+            if len(param_shape) >2:
+                param_shape = param_shape[1:]
+                param_dict[name] = param_shape
         return param_dict
 
     def get_named_parameters(self):

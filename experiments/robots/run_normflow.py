@@ -167,7 +167,7 @@ def train_normflow(args, logger, save_folder):
     torch.save(setup_dict, os.path.join(save_folder, 'setup'))
 
     # ------------ 8. NormFlows ------------
-    num_samples_nf_train = 100
+    num_samples_nf_train = 30
     num_samples_nf_eval = num_samples_nf_train 
 
     flows = []

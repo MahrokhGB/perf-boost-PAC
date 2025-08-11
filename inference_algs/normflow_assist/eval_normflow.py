@@ -25,6 +25,8 @@ def eval_norm_flow(sys, ctl_generic, data, loss_fn, count_collisions, return_tra
             num_samples = params.shape[0]
 
         # repeat data if num_samples>1
+        print('params shape:', params.shape)
+        # exit()
         if params.ndim==1:
             params = params.reshape(1, -1)
         elif params.ndim==2 and params.shape[0]>1:
