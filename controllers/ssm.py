@@ -2,13 +2,13 @@ import math
 import torch
 import sys, os
 import torch.nn as nn
-import torch.nn.functional as F
 from collections import OrderedDict
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(1, BASE_DIR)
 
 from config import device
+from controllers.nn_controller import batched_linear_layer
 from controllers.non_linearities import MLP, HamiltonianSIE, CouplingLayer
 
 
@@ -155,7 +155,7 @@ class SSM(nn.Module):
             raise NotImplementedError("The scaffolding_nonlin %s is not implemented" % scaffolding_nonlin)
     
         self.lru = LRU(dim_in, dim_out, dim_internal, scan, rmin, rmax, max_phase, internal_state_init).to(device)
-        self.lin = nn.Linear(dim_in, dim_out, bias=False).to(device)
+        self.lin = batched_linear_layer(dim_in, dim_out, bias=False).to(device)
 
         nn.init.zeros_(self.lin.weight.data)
 

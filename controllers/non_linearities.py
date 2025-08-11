@@ -1,6 +1,10 @@
-import torch
+import torch, sys, os
 import torch.nn as nn
-import torch.nn.functional as F
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(1, BASE_DIR)
+
+from controllers.nn_controller import batched_linear_layer
 
 
 # Simple MLP layer used in the SSM scaffolding later on, can be modified
@@ -8,11 +12,11 @@ class MLP(nn.Module):
     def __init__(self, input_size, hidden_size, output_size):
         super(MLP, self).__init__()
         # Define the model using nn.Sequential
-        self.model = nn.Sequential(nn.Linear(input_size, hidden_size, bias=False),  # First layer
+        self.model = nn.Sequential(batched_linear_layer(input_size, hidden_size, bias=False),  # First layer
                                    nn.SiLU(),  # Activation after the first layer
-                                   nn.Linear(hidden_size, hidden_size, bias=False),  # Hidden layer
+                                   batched_linear_layer(hidden_size, hidden_size, bias=False),  # Hidden layer
                                    nn.ReLU(),  # Activation after hidden layer
-                                   nn.Linear(hidden_size, output_size, bias=False)  # Output layer (no activation)
+                                   batched_linear_layer(hidden_size, output_size, bias=False)  # Output layer (no activation)
                                    )
         
         self.extract_param_names()  # Initialize param_names
@@ -118,9 +122,9 @@ class FCNN(nn.Module):
         super(FCNN, self).__init__()
 
         self.network = nn.Sequential(
-            nn.Linear(dim_in, dim_hidden, bias=False), act(),
-            # nn.Linear(hidden_dim, hidden_dim), act(),
-            nn.Linear(dim_hidden, dim_out, bias=False)
+            batched_linear_layer(dim_in, dim_hidden, bias=False), act(),
+            # batched_linear_layer(hidden_dim, hidden_dim), act(),
+            batched_linear_layer(dim_hidden, dim_out, bias=False)
         )
 
         self.extract_param_names()  # Initialize param_names
