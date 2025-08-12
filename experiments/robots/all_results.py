@@ -105,7 +105,7 @@ res_SVGD = [
 # python3 Simulations/perf-boost-PAC/experiments/robots/run_SVGD.py --num-rollouts 32 --batch-size 32 --cont-type PerfBoost --epochs 5000 --log-epoch 50 --early-stopping True --nominal-prior True --delta 0.1 --num-particles 1 --lr 5e-4 --nominal-prior-std-scale 39.546884104715836 --random-seed 0
 # seeds: 500, 0, 5, 412, 719
 # run times are not trustable, b.c. GPU was usually used 100%
-res_SVGD_32_rollouts = {
+res_SVGD_REN_32_rollouts = {
     'num_rollouts': 32,
     'Bounded train loss': [0.0842, 0.0862, 0.0859, 0.0834, 0.0856],
     'original train loss': [21.5872, 22.1045, 22.0370, 21.3935, 21.9623],
@@ -116,6 +116,7 @@ res_SVGD_32_rollouts = {
 }
 # --------- SSM ---------
 # python3 Simulations/perf-boost-PAC/experiments/robots/run_SVGD.py --num-rollouts 32 --batch-size 32 --cont-type PerfBoost --epochs 5000 --log-epoch 50 --early-stopping True --nominal-prior True --delta 0.1 --num-particles 1 --lr 5e-4 --nominal-prior-std-scale 39.546884104715836 --nn-type SSM --rmin 0.7 --random-seed 0
+res_SVGD_SSM_32_rollouts = {}
 
 # -----------------------------------------------------
 # empirical - 32 rollouts
@@ -135,13 +136,22 @@ res_emp_REN_32_rollouts = {
 # python3 Simulations/perf-boost-PAC/experiments/robots/run_emp.py --num-rollouts 32 --batch-size 32 --cont-type PerfBoost --nn-type SSM --epochs 5000 --log-epoch 50 --early-stopping True --lr 2e-4 --rmin 0.87 --random-seed 500
 res_emp_SSM_32_rollouts = {
     'num_rollouts': 32,
-    'Bounded train loss': [0.0840, 0.1259, 0.0901, 0.0897, 0.0909],
-    'original train loss': [21.5434, 32.4463, 23.1136, 23.0180, 23.3257],
-    'train num collisions': [0, 47, 0, 1, 0], 
-    'bounded test loss': [0.0858, 0.1598, 0.0947, 0.0935, 0.0990],
-    'original test loss': [22.0066, 43.1995, 24.2990, 23.9999, 25.4091],
-    'test num collisions': [6, 1012, 82, 115, 161]
+    'Bounded train loss': [0.0846, 0.0873, 0.0866, 0.0830, 0.0868],
+    'original train loss': [21.6978, 22.3925, 22.2209, 21.2816, 22.2589],
+    'train num collisions': [0, 0, 0, 0, 0], 
+    'bounded test loss': [0.0884, 0.0917, 0.0933, 0.0853, 0.0933],
+    'original test loss': [22.6619, 23.5147, 23.9575, 21.8727, 23.9513],
+    'test num collisions': [61, 81, 182, 16, 183]
 }
+# res_emp_SSM_32_rollouts = {
+#     'num_rollouts': 32,
+#     'Bounded train loss': [0.0840, 0.1259, 0.0901, 0.0897, 0.0909],
+#     'original train loss': [21.5434, 32.4463, 23.1136, 23.0180, 23.3257],
+#     'train num collisions': [0, 47, 0, 1, 0], 
+#     'bounded test loss': [0.0858, 0.1598, 0.0947, 0.0935, 0.0990],
+#     'original test loss': [22.0066, 43.1995, 24.2990, 23.9999, 25.4091],
+#     'test num collisions': [6, 1012, 82, 115, 161]
+# }
 
 # tune r_min
 # python3 Simulations/perf-boost-PAC/experiments/robots/hyper_param_opt.py --optuna-training-method empirical --num-rollouts 32 --batch-size 32 --cont-type PerfBoost --nn-type SSM --epochs 5000 --log-epoch 50 --early-stopping True --lr 5e-4 --random-seed 500
@@ -150,7 +160,7 @@ res_emp_SSM_32_rollouts = {
 # normflow - 32 rollouts
 # --------- REN ---------
 # python3 Simulations/perf-boost-PAC/experiments/robots/run_normflow.py --num-rollouts 32 --batch-size 32 --cont-type PerfBoost --epochs 5000 --log-epoch 50 --lr 5e-4 --base-is-prior True --nominal-prior True --nominal-prior-std-scale 58.93082020462471 --flow-activation tanh --delta 0.1 --random-seed 500 
-res_normflow_32_rollouts = {
+res_normflow_REN_32_rollouts = {
     'num_rollouts': 32,
     'Bounded train loss':[0.0835, 0.0823, 0.0874, 0.0833, 0.0865],
     'original train loss': None,
@@ -161,6 +171,7 @@ res_normflow_32_rollouts = {
 }
 # --------- SSM ---------
 # python3 Simulations/perf-boost-PAC/experiments/robots/run_normflow.py --num-rollouts 32 --batch-size 32 --cont-type PerfBoost --epochs 5000 --log-epoch 50 --lr 5e-4 --base-is-prior True --nominal-prior True --nominal-prior-std-scale 58.93082020462471 --flow-activation tanh --delta 0.1 --nn-type SSM --rmin 0.78 --random-seed 500 
+res_normflow_SSM_32_rollouts = {}
 
 # -----------------------------------------------------
 # -----------------------------------------------------
@@ -327,14 +338,15 @@ if __name__=='__main__':
 
 
     # plot the confidence intervals for SVGD with 32 rollouts
-    methods = ['SVGD', 'normflow', 'emp']
+    methods = ['emp']#['SVGD', 'normflow', 'emp']
+    nn_type = 'SSM'
     for method in methods:
         if method == 'SVGD':
-            res_32 = res_SVGD_32_rollouts
+            res_32 = res_SVGD_REN_32_rollouts if nn_type == 'REN' else res_SVGD_SSM_32_rollouts
         elif method == 'normflow':
-            res_32 = res_normflow_32_rollouts
+            res_32 = res_normflow_REN_32_rollouts if nn_type == 'REN' else res_normflow_SSM_32_rollouts
         elif method == 'emp':
-            res_32 = res_emp_32_rollouts
+            res_32 = res_emp_REN_32_rollouts if nn_type == 'REN' else res_emp_SSM_32_rollouts
 
         print("\n" + "-"*65)
         print(f"\nConfidence Intervals for {method} with 32 Rollouts:")
