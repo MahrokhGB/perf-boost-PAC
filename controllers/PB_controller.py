@@ -205,6 +205,7 @@ class PerfBoostController(nn.Module):
             # else:
             #     raise NotImplementedError
             idx_next = idx + dim
+            print('name:', name, 'shape:', shape, 'idx:', idx, 'idx_next:', idx_next)
             # select indx
             if value.ndim == 1:
                 value_tmp = value[idx:idx_next]

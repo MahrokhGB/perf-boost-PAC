@@ -54,7 +54,7 @@ def define_prior(args, training_param_names, save_path, logger):
                     res_dict_loaded.append(tmp_dict)
             # check if any nominal controllers were loaded 
             if len(res_dict_loaded) == 0:
-                raise ValueError("No nominal controllers found in the specified directory.")
+                raise ValueError("No nominal controllers found in the specified directory, "+str(os.path.join(save_path, 'nominal', args.nn_type, setup_name)))
             logger.info('[INFO] Loaded '+str(len(res_dict_loaded))+' nominal controllers.')
         prior_dict = {'type':'Gaussian'} 
         

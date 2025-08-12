@@ -175,7 +175,7 @@ class SSM(nn.Module):
             # remove batch size
             if len(param_shape) >2:
                 param_shape = param_shape[1:]
-                param_dict[name] = param_shape
+            param_dict[name] = param_shape
         return param_dict
     
     def extract_param_names(self):
@@ -287,7 +287,7 @@ class DeepSSM(nn.Module):
             # remove batch size
             if len(param_shape) >2:
                 param_shape = param_shape[1:]
-                param_dict[name] = param_shape
+            param_dict[name] = param_shape
         return param_dict
 
     def get_named_parameters(self):
