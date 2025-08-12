@@ -1,4 +1,3 @@
-from inference_algs.define_prior import define_prior
 import sys, os, logging, torch, math
 from datetime import datetime
 from torch.utils.data import DataLoader
