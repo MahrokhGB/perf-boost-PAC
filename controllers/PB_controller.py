@@ -165,7 +165,6 @@ class PerfBoostController(nn.Module):
     def set_parameter(self, name, value):
         # param_shape = getattr(self.emme, name+'_shape')
         param_shape = self.emme.get_parameter_shapes()[name]
-        print(name, value.shape, param_shape)
         if torch.empty(param_shape).nelement()==value.nelement():
             value = value.reshape(param_shape)
         else:
@@ -181,12 +180,10 @@ class PerfBoostController(nn.Module):
             self.emme._update_model_param()    # update dependent params
 
     def set_parameters(self, param_dict):
-        print('\n\nSetting parameters:')
         for name, value in param_dict.items():
             self.set_parameter(name, value)
 
     def set_parameters_as_vector(self, value):
-        print('\n\nSetting parameters:')
         # flatten vec if not batched
         if value.nelement()==self.num_params:
             value = value.flatten()
@@ -205,7 +202,6 @@ class PerfBoostController(nn.Module):
             # else:
             #     raise NotImplementedError
             idx_next = idx + dim
-            print('name:', name, 'shape:', shape, 'idx:', idx, 'idx_next:', idx_next)
             # select indx
             if value.ndim == 1:
                 value_tmp = value[idx:idx_next]

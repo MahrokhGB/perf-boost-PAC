@@ -284,7 +284,7 @@ def set_ren_ssm_defaults(args):
         args.scaffolding_nonlin = 'coupling_layers' if args.scaffolding_nonlin is None else args.scaffolding_nonlin
         args.dim_middle = 6 if args.dim_middle is None else args.dim_middle
         args.dim_scaffolding = 8 if args.dim_scaffolding is None else args.dim_scaffolding
-        args.rmin = 0.7 if args.rmin is None else args.rmin
+        args.rmin = 0.78 if args.rmin is None else args.rmin
         args.rmax = 1.0 if args.rmax is None else args.rmax
         args.max_phase = 6.283 if args.max_phase is None else args.max_phase
         # check none of REN parameters are set
