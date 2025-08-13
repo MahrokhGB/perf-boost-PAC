@@ -158,8 +158,6 @@ class SVGDCont():
         if early_stopping:
             valid_imp_queue = [100]*n_logs_no_change   # don't stop at the beginning
 
-        last_params = self.particles.detach().clone()  # params in the last iteration
-
         t = time.time()
         svgd_loss_hist = [None]*(1+epochs)
         if valid_data is not None:
@@ -176,13 +174,10 @@ class SVGDCont():
                 #     self.logger.info('[Unhandled ERR] in SVGD step: ' + type(e).__name__ + '\n')
                 #     self.logger.info(e)
                 #     exit()
-            
-            last_params = self.particles.detach().clone()
             svgd_loss_hist[epoch]= -self.svgd.log_prob_particles.item() #to('cpu').data.numpy()
 
             # --- print stats ---
             if (epoch % log_period == 0):
-                # print(self.particles.detach().clone()[0,0:10])
                 duration = time.time() - t
                 message = 'Epoch %d/%d - Elapsed time %.2f sec - SVGD Loss in epoch %.4f' % (
                     epoch, epochs, duration, self.svgd.log_prob_particles

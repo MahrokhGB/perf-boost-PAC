@@ -212,6 +212,8 @@ class PerfBoostController(nn.Module):
             else:
                 raise AssertionError
             # set
+            # with torch.no_grad():
+            #     self.set_parameter(name, value_tmp)
             if self.train_method in ['SVGD', 'normflow']:
                 self.set_parameter(name, value_tmp)
             elif self.train_method=='empirical':

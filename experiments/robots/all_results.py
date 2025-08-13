@@ -136,22 +136,25 @@ res_emp_REN_32_rollouts = {
 # python3 Simulations/perf-boost-PAC/experiments/robots/run_emp.py --num-rollouts 32 --batch-size 32 --cont-type PerfBoost --nn-type SSM --epochs 5000 --log-epoch 50 --early-stopping True --lr 2e-4 --78 --random-seed 500
 res_emp_SSM_32_rollouts = {
     'num_rollouts': 32,
-    'Bounded train loss': [0.0846, 0.0873, 0.0866, 0.0830, 0.0868],
-    'original train loss': [21.6978, 22.3925, 22.2209, 21.2816, 22.2589],
-    'train num collisions': [0, 0, 0, 0, 0], 
-    'bounded test loss': [0.0884, 0.0917, 0.0933, 0.0853, 0.0933],
-    'original test loss': [22.6619, 23.5147, 23.9575, 21.8727, 23.9513],
-    'test num collisions': [61, 81, 182, 16, 183]
+    'Bounded train loss': [0.0880, 0.0866, 0.0887, 0.2258, 0.1773],
+    'original train loss': [22.5642, 22.2063, 22.7617, 59.1617, 46.8513],
+    'train num collisions': [1, 0, 1, 254, 163],
+    'bounded test loss': [0.0927, 0.0896, 0.0922, 0.2883, 0.2574],
+    'original test loss': [23.7970, 22.9972, 23.6498, 84.4291, 92.5614],
+    'test num collisions': [87, 88, 153, 4153, 3775]
 }
+
+# small SSM with ~600 params
 # res_emp_SSM_32_rollouts = {
 #     'num_rollouts': 32,
-#     'Bounded train loss': [0.0840, 0.1259, 0.0901, 0.0897, 0.0909],
-#     'original train loss': [21.5434, 32.4463, 23.1136, 23.0180, 23.3257],
-#     'train num collisions': [0, 47, 0, 1, 0], 
-#     'bounded test loss': [0.0858, 0.1598, 0.0947, 0.0935, 0.0990],
-#     'original test loss': [22.0066, 43.1995, 24.2990, 23.9999, 25.4091],
-#     'test num collisions': [6, 1012, 82, 115, 161]
+#     'Bounded train loss': [0.0846, 0.0873, 0.0866, 0.0830, 0.0868],
+#     'original train loss': [21.6978, 22.3925, 22.2209, 21.2816, 22.2589],
+#     'train num collisions': [0, 0, 0, 0, 0], 
+#     'bounded test loss': [0.0884, 0.0917, 0.0933, 0.0853, 0.0933],
+#     'original test loss': [22.6619, 23.5147, 23.9575, 21.8727, 23.9513],
+#     'test num collisions': [61, 81, 182, 16, 183]
 # }
+
 
 # tune r_min
 # python3 Simulations/perf-boost-PAC/experiments/robots/hyper_param_opt.py --optuna-training-method empirical --num-rollouts 32 --batch-size 32 --cont-type PerfBoost --nn-type SSM --epochs 5000 --log-epoch 50 --early-stopping True --lr 5e-4 --random-seed 500

@@ -45,13 +45,14 @@ def define_prior(args, training_param_names, save_path, logger):
             for _, dirs, _ in os.walk(os.path.join(save_path, 'nominal', args.nn_type, setup_name)):
                 for dir in dirs:
                     filename_load = os.path.join(save_path, 'nominal', args.nn_type, setup_name, dir, 'trained_controller.pt')
-                    tmp_dict = torch.load(filename_load)
-                    if args.nn_type=='SSM':
-                        all_keys = list(tmp_dict.keys())
-                        # remove emme from the beginning of dict keys
-                        for key in all_keys:
-                            tmp_dict[key[5:]] = tmp_dict.pop(key)
-                    res_dict_loaded.append(tmp_dict)
+                    if os.path.isfile(filename_load):
+                        tmp_dict = torch.load(filename_load)
+                        if args.nn_type=='SSM':
+                            all_keys = list(tmp_dict.keys())
+                            # remove emme from the beginning of dict keys
+                            for key in all_keys:
+                                tmp_dict[key[5:]] = tmp_dict.pop(key)
+                        res_dict_loaded.append(tmp_dict)
             # check if any nominal controllers were loaded 
             if len(res_dict_loaded) == 0:
                 raise ValueError("No nominal controllers found in the specified directory, "+str(os.path.join(save_path, 'nominal', args.nn_type, setup_name)))
