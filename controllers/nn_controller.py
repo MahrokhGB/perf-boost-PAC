@@ -1,9 +1,47 @@
-import torch
+import torch, math
 from collections import OrderedDict
+from torch.nn import functional as F, init
 
-class batched_linear_layer(torch.nn.Linear):
-    def __init__(self, in_features, out_features, bias=True):
-        super().__init__(in_features, out_features, bias)
+class batched_linear_layer(torch.nn.Module):
+    def __init__(
+        self,
+        in_features: int,
+        out_features: int,
+        bias: bool = True,
+        train_method: str = 'empirical',
+    ):
+        super().__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+
+        weight_init = torch.empty((out_features, in_features))
+        if train_method=='empirical':
+            # register as parameter
+            setattr(self, 'weight', torch.nn.Parameter(weight_init))
+        else:
+            # register as buffer
+            self.register_buffer('weight', weight_init)
+        if bias:
+            if train_method=='empirical':
+                # register as parameter
+                setattr(self, 'bias', torch.nn.Parameter(torch.empty(out_features)))
+            else:
+                # register as buffer
+                self.register_buffer('bias', torch.empty(out_features))
+        else:
+            self.register_parameter("bias", None)
+        self.reset_parameters()
+
+    def reset_parameters(self) -> None:
+        # Setting a=sqrt(5) in kaiming_uniform is the same as initializing with
+        # uniform(-1/sqrt(in_features), 1/sqrt(in_features)). For details, see
+        # https://github.com/pytorch/pytorch/issues/57109
+        init.kaiming_uniform_(self.weight, a=math.sqrt(5))
+        if self.bias is not None:
+            fan_in, _ = init._calculate_fan_in_and_fan_out(self.weight)
+            bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
+            init.uniform_(self.bias, -bound, bound)
+
 
     def forward(self, input):
         assert not input.isinf().any()

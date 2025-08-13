@@ -44,7 +44,7 @@ class SVGD:
         # provided. grad is of size num_particles * num_prior_params and is a 2D tensor
 
         # take a step
-        # print(particles.requires_grad, particles.is_leaf)
+        # print(particles[0,0:5])
         self.optim.step()
 
 

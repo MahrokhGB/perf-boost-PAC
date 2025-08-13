@@ -18,9 +18,10 @@ class LRU(nn.Module):
     The LRU is simulated using Parallel Scan (fast!) when scan=True (default), otherwise recursively (slow)
     """
     def __init__(self,
-                 in_features: int,
-                 out_features: int,
-                 state_features: int,
+                 dim_in: int,
+                 dim_out: int,
+                 dim_internal: int,
+                 train_method: str,
                  scan: bool = True,  # This has been removed
                  rmin: float = 0.99,
                  rmax: float = 1.,
@@ -30,30 +31,22 @@ class LRU(nn.Module):
         super().__init__()
 
         # set dimensions
-        self.dim_internal = state_features
-        self.dim_in = in_features
+        self.dim_internal = dim_internal    # state dimension
+        self.dim_out = dim_out              # output dimension
+        self.dim_in = dim_in
         self.scan = scan
-        self.dim_out = out_features
+        self.dim_out = dim_out
 
-        self.D = nn.Parameter(torch.randn([out_features, in_features]) / math.sqrt(in_features))
-        u1 = torch.rand(state_features)
-        u2 = torch.rand(state_features)
-        self.nu_log = nn.Parameter(torch.log(-0.5 * torch.log(u1 * (rmax + rmin) * (rmax - rmin) + rmin ** 2)))
-        self.theta_log = nn.Parameter(torch.log(max_phase * u2))
-        lambda_mod = torch.exp(-torch.exp(self.nu_log))
-        self.gamma_log = nn.Parameter(torch.log(torch.sqrt(torch.ones_like(lambda_mod) - torch.square(lambda_mod))))
-        self.B_real = nn.Parameter(torch.randn([state_features, in_features]) / math.sqrt(2 * in_features))
-        self.B_imag = nn.Parameter(torch.randn([state_features, in_features]) / math.sqrt(2 * in_features))
-        self.C_real = nn.Parameter(torch.randn([out_features, state_features]) / math.sqrt(state_features))
-        self.C_imag = nn.Parameter(torch.randn([out_features, state_features]) / math.sqrt(state_features))
-        # self.state = torch.complex(torch.zeros(state_features), torch.zeros(state_features))
+        self.rmin, self.rmax, self.max_phase = rmin, rmax, max_phase
+        self.train_method = train_method
 
         # define trainable params
         self.training_param_names = ['D', 'nu_log', 'theta_log', 'gamma_log', 'B_real', 'B_imag', 'C_real', 'C_imag']
+        self._init_trainable_params()   # TODO: add self.initialization_std
 
         # initialize internal state
         if internal_state_init is None:
-            self.x = torch.complex(torch.zeros(state_features), torch.zeros(state_features))
+            self.x = torch.complex(torch.zeros(self.dim_internal), torch.zeros(self.dim_internal))
             # torch.zeros(1, 1, self.dim_internal)
         else:
             assert isinstance(internal_state_init, torch.Tensor)
@@ -64,6 +57,30 @@ class LRU(nn.Module):
                 self.x = torch.complex(internal_state_init, torch.zeros(self.dim_internal))
         self.register_buffer('init_x', self.x.detach().clone())
 
+    # init trainable params
+    def _init_trainable_params(self):
+        # define initialization values
+        init_vals = {
+            'D': torch.randn([self.dim_out, self.dim_in]) / math.sqrt(self.dim_in),
+            'nu_log': torch.log(-0.5 * torch.log(torch.rand(self.dim_internal) * (self.rmax + self.rmin) * (self.rmax - self.rmin) + self.rmin ** 2)),
+            'theta_log': torch.log(self.max_phase * torch.rand(self.dim_internal)),
+            'B_real': torch.randn([self.dim_internal, self.dim_in]) / math.sqrt(2 * self.dim_in),
+            'B_imag': torch.randn([self.dim_internal, self.dim_in]) / math.sqrt(2 * self.dim_in),
+            'C_real': torch.randn([self.dim_out, self.dim_internal]) / math.sqrt(self.dim_internal),
+            'C_imag': torch.randn([self.dim_out, self.dim_internal]) / math.sqrt(self.dim_internal)
+        }
+        lambda_mod = torch.exp(-torch.exp(init_vals['nu_log']))
+        init_vals['gamma_log'] = torch.log(torch.sqrt(torch.ones_like(lambda_mod) - torch.square(lambda_mod)))
+        # initialize trainable params
+        for training_param_name in self.training_param_names:  # name of one of the training params, e.g., D
+            param_val = init_vals[training_param_name]
+            if self.train_method=='empirical':
+                # register as parameter
+                setattr(self, training_param_name, nn.Parameter(param_val))
+            else:
+                # register as buffer
+                self.register_buffer(training_param_name, param_val)
+                
     def forward(self, u_in):
         """
         Forward pass of SSM.
@@ -72,7 +89,6 @@ class LRU(nn.Module):
         Return:
             y_out (torch.Tensor): Output with (batch_size, 1, self.dim_out).
         """
-        batch_size = u_in.shape[0]
         if len(u_in.shape) > 2:
             if len(self.x.shape) != len(u_in.shape)-1:
                 self.x = self.x.repeat(*u_in.shape[:-2], 1)
@@ -122,6 +138,7 @@ class SSM(nn.Module):
                  dim_out: int,
                  dim_internal: int,
                  dim_scaffolding: int = 30,
+                 train_method: str = 'empirical',
                  scan: bool = False,
                  rmin: float = 0.95,
                  rmax: float = 0.99,
@@ -138,21 +155,25 @@ class SSM(nn.Module):
         self.dim_scaffolding = dim_scaffolding
 
         if scaffolding_nonlin == "MLP":
-            self.scaffold = MLP(dim_out, dim_scaffolding, dim_out).to(device)
+            self.scaffold = MLP(dim_out, dim_scaffolding, dim_out, train_method=train_method).to(device)
         elif scaffolding_nonlin == "coupling_layers":
             # Option 2: coupling (or invertible) layers
-            self.scaffold = CouplingLayer(dim_out, dim_scaffolding).to(device)
+            self.scaffold = CouplingLayer(dim_out, dim_scaffolding, train_method=train_method).to(device)
         elif scaffolding_nonlin == "hamiltonian":
             # Option 3: Hamiltonian net
-            self.scaffold = HamiltonianSIE(n_layers=4, nf=dim_out, bias=False).to(device)
+            self.scaffold = HamiltonianSIE(n_layers=4, nf=dim_out, bias=False, train_method=train_method).to(device)
         elif scaffolding_nonlin == "tanh":
             self.scaffold = torch.tanh.to(device)
         else:
             # End options
             raise NotImplementedError("The scaffolding_nonlin %s is not implemented" % scaffolding_nonlin)
     
-        self.lru = LRU(dim_in, dim_out, dim_internal, scan, rmin, rmax, max_phase, internal_state_init).to(device)
-        self.lin = batched_linear_layer(dim_in, dim_out, bias=False).to(device)
+        self.lru = LRU(
+            dim_in=dim_in, dim_out=dim_out, dim_internal=dim_internal, 
+            scan=scan, train_method=train_method,
+            rmin=rmin, rmax=rmax, max_phase=max_phase, internal_state_init=internal_state_init
+        ).to(device)
+        self.lin = batched_linear_layer(dim_in, dim_out, bias=False, train_method=train_method).to(device)
 
         nn.init.zeros_(self.lin.weight.data)
 
@@ -216,16 +237,12 @@ class SSM(nn.Module):
         Sets the tensor corresponding to the parameter name.
         """
         if param_name.startswith('lru.'):
-            value = torch.nn.Parameter(value)
             setattr(self.lru, param_name[4:], value)
         elif param_name.startswith('scaffold.'):
-            value = torch.nn.Parameter(value)
             self.scaffold.set_parameter(param_name[9:], value)
         elif param_name == 'lin.weight':
-            value = torch.nn.Parameter(value)
             setattr(self.lin, 'weight', value)
         elif param_name == 'lin.bias':
-            value = torch.nn.Parameter(value)
             setattr(self.lin, 'bias', value)
         else:
             raise ValueError(f'Unknown parameter name: {param_name}')
@@ -239,6 +256,7 @@ class DeepSSM(nn.Module):
                  dim_internal: int,
                  dim_middle: int,
                  dim_scaffolding: int = 30,
+                 train_method: str = 'empirical',
                  scan: bool = False,
                  # n_ssm: int,
                  rmin: float = 0.9,
@@ -258,12 +276,12 @@ class DeepSSM(nn.Module):
         self.ssm1 = SSM(
             dim_in=dim_in, dim_out=dim_middle, dim_internal=dim_internal, dim_scaffolding=dim_scaffolding, 
             scan=scan, rmin=rmin, rmax=rmax, max_phase=max_phase, scaffolding_nonlin=scaffolding_nonlin,
-            internal_state_init=internal_state_init
+            internal_state_init=internal_state_init, train_method=train_method
         )
         self.ssm2 = SSM(
             dim_in=dim_middle, dim_out=dim_out, dim_internal=dim_internal, dim_scaffolding=dim_scaffolding, 
             scan=scan, rmin=rmin, rmax=rmax, max_phase=max_phase, scaffolding_nonlin=scaffolding_nonlin,
-            internal_state_init=internal_state_init
+            internal_state_init=internal_state_init, train_method=train_method
         )
 
         # count number of parameters

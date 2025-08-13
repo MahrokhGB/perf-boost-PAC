@@ -118,13 +118,13 @@ class HamiltonianSIE(nn.Module):
 
 
 class FCNN(nn.Module):
-    def __init__(self, dim_in, dim_out, dim_hidden, act=nn.Tanh):
+    def __init__(self, dim_in, dim_out, dim_hidden, train_method, act=nn.Tanh):
         super(FCNN, self).__init__()
 
         self.network = nn.Sequential(
-            batched_linear_layer(dim_in, dim_hidden, bias=False), act(),
+            batched_linear_layer(dim_in, dim_hidden, bias=False, train_method=train_method), act(),
             # batched_linear_layer(hidden_dim, hidden_dim), act(),
-            batched_linear_layer(dim_hidden, dim_out, bias=False)
+            batched_linear_layer(dim_hidden, dim_out, bias=False, train_method=train_method)
         )
 
         self.extract_param_names()  # Initialize param_names
@@ -154,14 +154,14 @@ class CouplingLayer(nn.Module):
     """
     An implementation of a coupling layer from RealNVP (https://arxiv.org/abs/1605.08803).
     """
-    def __init__(self, dim_inputs, dim_hidden):
+    def __init__(self, dim_inputs, dim_hidden, train_method):
         super(CouplingLayer, self).__init__()
 
         self.dim_inputs = dim_inputs
         self.register_buffer('mask', torch.arange(0, dim_inputs) % 2) # alternating inputs
 
-        self.scale_net = FCNN(dim_in=dim_inputs, dim_out=dim_inputs, dim_hidden=dim_hidden)
-        self.translate_net = FCNN(dim_in=dim_inputs, dim_out=dim_inputs, dim_hidden=dim_hidden)
+        self.scale_net = FCNN(dim_in=dim_inputs, dim_out=dim_inputs, dim_hidden=dim_hidden, train_method=train_method)
+        self.translate_net = FCNN(dim_in=dim_inputs, dim_out=dim_inputs, dim_hidden=dim_hidden, train_method=train_method)
 
         nn.init.normal_(self.translate_net.network[0].weight.data, std=0.1)
         nn.init.normal_(self.translate_net.network[2].weight.data, std=0.1)

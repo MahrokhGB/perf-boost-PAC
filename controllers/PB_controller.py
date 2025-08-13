@@ -98,7 +98,8 @@ class PerfBoostController(nn.Module):
                 rmax=rmax,
                 max_phase=max_phase,
                 internal_state_init=None,
-                scaffolding_nonlin=scaffolding_nonlin
+                scaffolding_nonlin=scaffolding_nonlin,
+                train_method=train_method
             ).to(device)
         else:
             raise ValueError("Model for emme not implemented")
