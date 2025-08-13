@@ -138,7 +138,7 @@ class SSM(nn.Module):
                  dim_out: int,
                  dim_internal: int,
                  dim_scaffolding: int = 30,
-                 train_method: str = 'empirical',
+                 train_method: str = None,
                  scan: bool = False,
                  rmin: float = 0.95,
                  rmax: float = 0.99,
@@ -147,6 +147,8 @@ class SSM(nn.Module):
                  scaffolding_nonlin: str = "MLP"
                  ):
         super().__init__()
+
+        assert train_method in ['empirical', 'normflow', 'SVGD']
 
         # set dimensions
         self.dim_in = dim_in
@@ -256,7 +258,7 @@ class DeepSSM(nn.Module):
                  dim_internal: int,
                  dim_middle: int,
                  dim_scaffolding: int = 30,
-                 train_method: str = 'empirical',
+                 train_method: str = None,
                  scan: bool = False,
                  # n_ssm: int,
                  rmin: float = 0.9,
@@ -266,6 +268,8 @@ class DeepSSM(nn.Module):
                  scaffolding_nonlin="MLP"
                  ):
         super().__init__()
+
+        assert train_method in ['empirical', 'normflow', 'SVGD']
 
         # set dimensions
         self.dim_in = dim_in

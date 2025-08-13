@@ -24,7 +24,7 @@ class PerfBoostController(nn.Module):
                  nn_type: str = "REN",
                  dim_internal: int = 8,
                  output_amplification: float = 20,
-                 train_method: str = 'empirical',
+                 train_method: str = None,
                  # SSM properties
                  scaffolding_nonlin: str = None,
                  dim_middle: int = 6,
@@ -66,6 +66,7 @@ class PerfBoostController(nn.Module):
 
         self.output_amplification = output_amplification
         self.train_method = train_method
+        assert self.train_method in ['empirical', 'normflow', 'SVGD']
 
         # set initial conditions
         self.input_init = input_init.reshape(1, -1)

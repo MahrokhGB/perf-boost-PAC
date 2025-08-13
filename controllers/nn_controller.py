@@ -1,6 +1,5 @@
 import torch, math
 from collections import OrderedDict
-from torch.nn import functional as F, init
 
 class batched_linear_layer(torch.nn.Module):
     def __init__(
@@ -8,11 +7,12 @@ class batched_linear_layer(torch.nn.Module):
         in_features: int,
         out_features: int,
         bias: bool = True,
-        train_method: str = 'empirical',
+        train_method: str = None,
     ):
         super().__init__()
         self.in_features = in_features
         self.out_features = out_features
+        assert train_method in ['empirical', 'normflow', 'SVGD']
 
         weight_init = torch.empty((out_features, in_features))
         if train_method=='empirical':
@@ -36,11 +36,11 @@ class batched_linear_layer(torch.nn.Module):
         # Setting a=sqrt(5) in kaiming_uniform is the same as initializing with
         # uniform(-1/sqrt(in_features), 1/sqrt(in_features)). For details, see
         # https://github.com/pytorch/pytorch/issues/57109
-        init.kaiming_uniform_(self.weight, a=math.sqrt(5))
+        torch.nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
         if self.bias is not None:
-            fan_in, _ = init._calculate_fan_in_and_fan_out(self.weight)
+            fan_in, _ = torch.nn.init._calculate_fan_in_and_fan_out(self.weight)
             bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
-            init.uniform_(self.bias, -bound, bound)
+            torch.nn.init.uniform_(self.bias, -bound, bound)
 
 
     def forward(self, input):

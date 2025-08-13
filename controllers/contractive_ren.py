@@ -30,7 +30,7 @@ class ContractiveREN(nn.Module):
         self, dim_in: int, dim_out: int, dim_internal: int,
         dim_nl: int, internal_state_init = None, initialization_std: float = 0.5,
         pos_def_tol: float = 0.001, contraction_rate_lb: float = 1.0,
-        train_method:str = 'empirical',
+        train_method:str = None,
     ):
         """
         Args:
