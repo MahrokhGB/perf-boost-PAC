@@ -83,7 +83,7 @@ class PerfBoostController(nn.Module):
                 dim_in=self.dim_in, dim_out=self.dim_out, dim_internal=dim_internal,
                 dim_nl=dim_nl, initialization_std=initialization_std,
                 internal_state_init=ren_internal_state_init,
-                pos_def_tol=pos_def_tol, contraction_rate_lb=contraction_rate_lb
+                pos_def_tol=pos_def_tol, contraction_rate_lb=contraction_rate_lb, train_method=train_method
             ).to(device)
         elif nn_type == "SSM":
             # define the SSM
@@ -163,15 +163,13 @@ class PerfBoostController(nn.Module):
     # #     return np.concatenate([p.detach().clone().cpu().numpy().flatten() for p in self.emme.parameters()])
 
     def set_parameter(self, name, value):
-        # param_shape = getattr(self.emme, name+'_shape')
         param_shape = self.emme.get_parameter_shapes()[name]
         if torch.empty(param_shape).nelement()==value.nelement():
             value = value.reshape(param_shape)
         else:
             value = value.reshape(value.shape[0], *param_shape)
-        value = torch.nn.Parameter(value)
-        # if self.train_method=='empirical':
-        #     value = torch.nn.Parameter(value)
+        if self.train_method=='empirical':
+            value = torch.nn.Parameter(value)
         if isinstance(self.emme, DeepSSM):
             # set the parameter in the SSM
             self.emme.set_parameter(name, value)
@@ -211,9 +209,7 @@ class PerfBoostController(nn.Module):
                 value_tmp = value[:, :, idx:idx_next]
             else:
                 raise AssertionError
-            # set
-            # with torch.no_grad():
-            #     self.set_parameter(name, value_tmp)
+            # set parameter
             if self.train_method in ['SVGD', 'normflow']:
                 self.set_parameter(name, value_tmp)
             elif self.train_method=='empirical':
