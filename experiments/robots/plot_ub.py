@@ -115,7 +115,7 @@ args.base_is_prior = True
 args.flow_activation = 'tanh'
 args.nominal_prior_std_scale = None # will be set later
 
-save_path = os.path.join(BASE_DIR, 'experiments', 'robots', 'ub_ub', 'saved_results')
+save_path = os.path.join(BASE_DIR, 'experiments', 'robots', 'saved_results')
 setup_name ='internal' + str(args.dim_internal)
 if args.nn_type == 'REN':
     setup_name += '_nl' + str(args.dim_nl)
