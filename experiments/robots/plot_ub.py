@@ -6,7 +6,6 @@ sys.path.insert(1, BASE_DIR)
 from utils.assistive_functions import WrapLogger
 from arg_parser import argument_parser
 from experiments.robots.run_normflow import train_normflow
-from inference_algs.normflow_assist.eval_normflow import eval_normflow
 
 # norm flow
 # use lambda star and tune nominal prior std for best performance, then grid search over N_p for tightest bound 
