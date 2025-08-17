@@ -24,5 +24,5 @@ def get_conf_interval(array, confidence=95, n_digits=2, format='plus_minus'):
         print(f'Confidence interval: [{l_bound:.{n_digits}f}, {u_bound:.{n_digits}f}]')
 
 # Example
-# array = np.array([27, 62, 25, 29, 8])
-# get_conf_interval(array, confidence=95)
+array = np.array([2958, 6259, 2355, 2990, 1914])
+get_conf_interval(array, confidence=95)

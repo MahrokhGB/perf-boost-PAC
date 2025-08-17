@@ -112,7 +112,8 @@ res_SVGD_REN_32_rollouts = {
     'train num collisions': [22, 22, 22, 21, 22],
     'bounded test loss': [0.0870, 0.0884, 0.0891, 0.0860, 0.0901],
     'original test loss': [22.31, 22.67, 22.86, 22.07, 23.12],
-    'test num collisions': [22, 23, 23, 22, 23]
+    'test num collisions': [22, 23, 23, 22, 23],
+    'training time (s)': [3306.53, 1579.64, 3215.69, 4180.51, 4456.48]
 }
 # --------- SSM ---------
 # python3 Simulations/perf-boost-PAC/experiments/robots/run_SVGD.py --num-rollouts 32 --batch-size 32 --cont-type PerfBoost --epochs 5000 --log-epoch 50 --early-stopping True --nominal-prior True --delta 0.1 --num-particles 1 --lr 5e-4 --nominal-prior-std-scale 39.546884104715836 --nn-type SSM --rmin 0.7 --random-seed 0
@@ -129,7 +130,8 @@ res_emp_REN_32_rollouts = {
     'train num collisions':[2, 0, 0, 0, 0], 
     'bounded test loss':[0.0877, 0.0841, 0.0920, 0.0857, 0.1110],
     'original test loss':[22.5028, 22.1920, 23.6150, 21.9774, 28.5421],
-    'test num collisions':[43, 11, 166, 14, 425]
+    'test num collisions':[43, 11, 166, 14, 425],
+    'training time (s)': [2765, 3845, 2959, 4314,1533]
 }
 # --------- SSM ---------
 # tuned lr and rmin = 2e-4, 0.87
@@ -141,7 +143,8 @@ res_emp_SSM_32_rollouts = {
     'train num collisions': [1, 0, 1, 254, 163],
     'bounded test loss': [0.0927, 0.0896, 0.0922, 0.2883, 0.2574],
     'original test loss': [23.7970, 22.9972, 23.6498, 84.4291, 92.5614],
-    'test num collisions': [87, 88, 153, 4153, 3775]
+    'test num collisions': [87, 88, 153, 4153, 3775],
+    # 'training time (s)': [4185, 4146, 7964]  
 }
 
 # small SSM with ~600 params
@@ -170,7 +173,8 @@ res_normflow_REN_32_rollouts = {
     'train num collisions':[0, 0, 0, 0, 0],
     'bounded test loss': [0.0849, 0.0841, 0.0907, 0.0845, 0.0879],
     'original test loss':None,
-    'test num collisions':[4, 11, 81, 5, 22]
+    'test num collisions':[4, 11, 81, 5, 22],
+    'training time (s)': [2958, 6259, 2355, 2990, 1914]
 }
 # --------- SSM ---------
 # python3 Simulations/perf-boost-PAC/experiments/robots/run_normflow.py --num-rollouts 32 --batch-size 32 --cont-type PerfBoost --epochs 5000 --log-epoch 50 --lr 5e-4 --base-is-prior True --nominal-prior True --nominal-prior-std-scale 58.93082020462471 --flow-activation tanh --delta 0.1 --nn-type SSM --rmin 0.78 --random-seed 500 

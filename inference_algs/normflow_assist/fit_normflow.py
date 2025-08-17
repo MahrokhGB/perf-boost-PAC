@@ -1,3 +1,4 @@
+import pickle
 import torch, os, sys, time, copy
 import matplotlib.pyplot as plt
 
@@ -195,28 +196,36 @@ def fit_norm_flow(
     logger.info('\n[INFO] evaluating the trained flow on the entire %i training rollouts.' % train_data_full.shape[0])
     train_loss, train_num_col = eval_norm_flow(
         nfm=nfm, sys=sys, ctl_generic=ctl_generic, data=train_data_full,
-        num_samples=num_samples_nf_eval, loss_fn=loss_fn, count_collisions=col_av
+        num_samples=num_samples_nf_eval, loss_fn=loss_fn, count_collisions=col_av, return_av=False
     )
-    msg = 'Average loss: %.4f' % train_loss
+    train_loss_av = sum(train_loss)/len(train_loss)
+    train_num_col_av = sum(train_num_col)/len(train_num_col)
+    msg = 'Average loss: %.4f' % train_loss_av
     if col_av:
-        msg += ' -- total number of collisions = %i' % train_num_col
+        msg += ' -- total number of collisions = %i' % train_num_col_av
     logger.info(msg)
 
     # evaluate on the test data
     logger.info('\n[INFO] evaluating the trained flow on %i test rollouts.' % test_data.shape[0])
     test_loss, test_num_col = eval_norm_flow(
         nfm=nfm, sys=sys, ctl_generic=ctl_generic, data=test_data,
-        num_samples=num_samples_nf_eval, loss_fn=loss_fn, count_collisions=col_av
+        num_samples=num_samples_nf_eval, loss_fn=loss_fn, count_collisions=col_av, return_av=False
     )
-    msg = 'Average loss: %.4f' % test_loss
+    test_loss_av = sum(test_loss)/len(test_loss)
+    test_num_col_av = sum(test_num_col)/len(test_num_col)
+    msg = 'Average loss: %.4f' % test_loss_av
     if col_av:
-        msg += ' -- total number of collisions = %i' % test_num_col
+        msg += ' -- total number of collisions = %i' % test_num_col_av
     logger.info(msg)
 
     res_dict = {
         'train_loss':train_loss, 'train_num_col':train_num_col,
-        'test_loss':test_loss, 'test_num_col':test_num_col
+        'train_loss_av': train_loss_av, 'train_num_col_av': train_num_col_av,
+        'test_loss':test_loss, 'test_num_col':test_num_col,
+        'test_loss_av': test_loss_av, 'test_num_col_av': test_num_col_av
     }
+    with open(os.path.join(save_folder, 'res_dict.pkl'), 'wb') as file:
+        pickle.dump(res_dict, file)
 
     # plot closed-loop trajectories using the trained controller
     logger.info('Plotting closed-loop trajectories using the trained controller...')
