@@ -8,8 +8,7 @@ from run_SVGD import train_svgd
 from run_normflow import train_normflow
 from utils.assistive_functions import WrapLogger
 
-TUNE_LR = True
-RANDOM_SEEDS = [500, 0, 5, 412, 719]
+
 
 def define_tunables(args):
     """Set tunable hyperparameters for the experiment."""
@@ -122,14 +121,22 @@ def objective(trial):
     for seed in RANDOM_SEEDS:
         args.random_seed = seed
         logger.info(f"Trial {trial.number}, Seed {seed}")
+
+        # subfolder
+        subsave_folder = os.path.join(save_folder, f"trial_{trial.number}_seed_{seed}")
+        os.makedirs(subsave_folder)
+        logging.basicConfig(filename=os.path.join(subsave_folder, 'log'), format='%(asctime)s %(message)s', filemode='w')
+        sublogger = logging.getLogger('perf_boost_')
+        sublogger.setLevel(logging.DEBUG)
+        sublogger = WrapLogger(sublogger)
         
         # train the model
         if method=='empirical':
-            res_dict, _ = train_emp(args, logger, save_folder)
+            res_dict, _ = train_emp(args, sublogger, subsave_folder)
         elif method=='SVGD':
-            res_dict, _ = train_svgd(args, logger, save_folder)
+            res_dict, _ = train_svgd(args, sublogger, subsave_folder)
         elif method=='normflow':
-            res_dict, _, _ = train_normflow(args, logger, save_folder)
+            res_dict, _, _ = train_normflow(args, sublogger, subsave_folder)
         else:
             raise ValueError("Method not recognized. Choose from 'empirical', 'SVGD', or 'normflow'.")
         
@@ -177,6 +184,8 @@ optuna.logging.disable_default_handler()  # Disable the default handler.
 optuna.logging.enable_propagation()  # Propagate logs to the root logger.
 
 # define the tunables based on the method
+TUNE_LR = True
+RANDOM_SEEDS = [500, 0, 5, 412, 719] if args.optuna_all_seeds else [0]
 tunables = define_tunables(args)
 
 # ----- START OPTUNA STUDY -----

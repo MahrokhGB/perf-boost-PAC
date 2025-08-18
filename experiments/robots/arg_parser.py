@@ -105,6 +105,7 @@ def argument_parser():
     parser.add_argument('--optuna-n-trials', type=int, default=10, help='Number of trials used for hyperparameter optimization with Optuna. Default is 10.')
     parser.add_argument('--optuna-search-scale', type=float, default=10, help='Set search space for hyperparameter optimization with Optuna to [nominal/scale, nominal*scale]. Default is 10.')
     parser.add_argument('--optuna-training-method', type=str, default=None, help='Training method for which hyperparameter optimization is performed. Can be empirical, normflow, or SVGD.')
+    parser.add_argument('--optuna-all-seeds', type=str2bool, default=False, help='Hyper-parameter optimization based on average performance over 5 random seeds. Default is False.')
     
 
     args = parser.parse_args()

@@ -1,3 +1,5 @@
+# python3 Simulations/perf-boost-PAC/experiments/robots/plot_ub.py --num-rollouts 8 --nn-type REN
+
 import math
 import sys, os, logging
 
