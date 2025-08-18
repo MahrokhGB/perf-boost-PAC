@@ -114,6 +114,11 @@ args.nominal_prior = True
 args.base_is_prior = True
 args.flow_activation = 'tanh'
 args.nominal_prior_std_scale = None # will be set later
+args.cont_type = 'PerfBoost'
+args.lr = 5e-4
+args.delta = 0.1
+args.log_epoch = 50
+args.epochs = 5000
 
 save_path = os.path.join(BASE_DIR, 'experiments', 'robots', 'saved_results')
 setup_name ='internal' + str(args.dim_internal)
@@ -122,7 +127,7 @@ if args.nn_type == 'REN':
 elif args.nn_type == 'SSM':
     setup_name += '_middle' + str(args.dim_middle) + '_scaffolding' + str(args.dim_scaffolding)
 
-res = res_normflow[int(math.log(args.num_rollouts/8, base=2))]  
+res = res_normflow[int(math.log(args.num_rollouts/8, 2))]  
 args.batch_size = min(res['num_rollouts'], 256)
 args.nominal_prior_std_scale = res['nominal_prior_std_scale']
     # ----- SET UP LOGGER -----
