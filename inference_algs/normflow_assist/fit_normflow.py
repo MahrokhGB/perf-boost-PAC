@@ -230,7 +230,7 @@ def fit_norm_flow(
     # plot closed-loop trajectories using the trained controller
     logger.info('Plotting closed-loop trajectories using the trained controller...')
     with torch.no_grad():
-        z, _ = nfm.sample(100)
+        z, _ = nfm.sample(num_samples_nf_eval)
         z_mean = torch.mean(z, axis=0)
         _, xs_z_plot = eval_norm_flow(
             sys=sys, ctl_generic=ctl_generic, data=plot_data,
