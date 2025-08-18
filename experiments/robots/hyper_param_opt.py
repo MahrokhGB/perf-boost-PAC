@@ -125,18 +125,14 @@ def objective(trial):
         # subfolder
         subsave_folder = os.path.join(save_folder, f"trial_{trial.number}_seed_{seed}")
         os.makedirs(subsave_folder)
-        logging.basicConfig(filename=os.path.join(subsave_folder, 'log'), format='%(asctime)s %(message)s', filemode='w')
-        sublogger = logging.getLogger('perf_boost_')
-        sublogger.setLevel(logging.DEBUG)
-        sublogger = WrapLogger(sublogger)
         
         # train the model
         if method=='empirical':
-            res_dict, _ = train_emp(args, sublogger, subsave_folder)
+            res_dict, _ = train_emp(args, logger, subsave_folder)
         elif method=='SVGD':
-            res_dict, _ = train_svgd(args, sublogger, subsave_folder)
+            res_dict, _ = train_svgd(args, logger, subsave_folder)
         elif method=='normflow':
-            res_dict, _, _ = train_normflow(args, sublogger, subsave_folder)
+            res_dict, _, _ = train_normflow(args, logger, subsave_folder)
         else:
             raise ValueError("Method not recognized. Choose from 'empirical', 'SVGD', or 'normflow'.")
         
