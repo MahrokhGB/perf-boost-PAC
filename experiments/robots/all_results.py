@@ -177,7 +177,7 @@ res_normflow_REN_32_rollouts = {
     'training time (s)': [2958, 6259, 2355, 2990, 1914]
 }
 # --------- SSM ---------
-# python3 Simulations/perf-boost-PAC/experiments/robots/run_normflow.py --num-rollouts 32 --batch-size 32 --cont-type PerfBoost --epochs 5000 --log-epoch 50 --lr 5e-4 --base-is-prior True --nominal-prior True --nominal-prior-std-scale 58.93082020462471 --flow-activation tanh --delta 0.1 --nn-type SSM --rmin 0.78 --random-seed 500 
+# python3 Simulations/perf-boost-PAC/experiments/robots/run_normflow.py --num-rollouts 32 --log-epoch 50 --lr 5e-4 --base-is-prior True --nominal-prior True --nominal-prior-std-scale 58.93082020462471 --flow-activation tanh --nn-type SSM --rmin 0.78 --random-seed 500 
 res_normflow_SSM_32_rollouts = {}
 
 # -----------------------------------------------------
@@ -185,7 +185,7 @@ res_normflow_SSM_32_rollouts = {}
 # -----------------------------------------------------
 # norm flow
 # use lambda star and tune nominal prior std for best performance, then grid search over N_p for tightest bound 
-# python3 Simulations/perf-boost-PAC/experiments/robots/hyper_param_opt.py --optuna-training-method normflow --num-rollouts 2048 --batch-size 256 --cont-type PerfBoost --epochs 5000 --log-epoch 50 --early-stopping True --nominal-prior True --base-is-prior True --flow-activation tanh --delta 0.1 --lr 5e-4 --random-seed 0
+# python3 Simulations/perf-boost-PAC/experiments/robots/hyper_param_opt.py --optuna-training-method normflow --nn-type REN --log-epoch 50 --nominal-prior True --base-is-prior True --flow-activation tanh --lr 5e-4 --num-rollouts 2048 
 res_normflow = [
     {
         'num_rollouts':8,

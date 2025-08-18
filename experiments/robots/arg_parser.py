@@ -64,7 +64,7 @@ def argument_parser():
     parser.add_argument('--loss-bound', type=float, default=1.0, help='Bound the loss to this value. Default is 1.')
     
     # optimizer
-    parser.add_argument('--batch-size', type=int, default=5, help='Number of forward trajectories of the closed-loop system at each step. Default is 5.')
+    parser.add_argument('--batch-size', type=int, default=-1, help='Number of forward trajectories of the closed-loop system at each step. Default is num_rollouts if num_rollouts <=256, else 256.')
     parser.add_argument('--epochs', type=int, default=-1, help='Total number of epochs for training. Default is 5000 if collision avoidance, else 100.')
     parser.add_argument('--lr', type=float, default=-1, help='Learning rate. Default is 2e-3 if collision avoidance, else 5e-3.')
     parser.add_argument('--weight-decay', type=float, default=0, help='Weight decay for Adam optimizer. Default is 0.')
@@ -119,7 +119,7 @@ def argument_parser():
 
     # set default values that depend on other args
     if args.batch_size==-1:
-        args.batch_size = args.num_rollouts # use all train data
+        args.batch_size = args.num_rollouts if args.num_rollouts<=256 else 256
 
     if args.epochs==-1 or args.epochs is None:
         args.epochs = 1000 if args.col_av else 50

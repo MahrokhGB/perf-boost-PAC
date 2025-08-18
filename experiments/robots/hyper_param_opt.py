@@ -184,7 +184,7 @@ optuna.logging.disable_default_handler()  # Disable the default handler.
 optuna.logging.enable_propagation()  # Propagate logs to the root logger.
 
 # define the tunables based on the method
-TUNE_LR = True
+TUNE_LR = False
 RANDOM_SEEDS = [500, 0, 5, 412, 719] if args.optuna_all_seeds else [0]
 tunables = define_tunables(args)
 
