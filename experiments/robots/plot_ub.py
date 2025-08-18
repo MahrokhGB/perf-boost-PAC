@@ -1,3 +1,4 @@
+import math
 import sys, os, logging
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -107,7 +108,6 @@ res_normflow = [
 # ----- default experiment arguments -----
 args = argument_parser()
 args.random_seed = 0
-args.num_rollouts = None # will be set later
 args.batch_size = None # will be set later
 args.nn_type = 'REN'
 args.nominal_prior = True
@@ -122,18 +122,17 @@ if args.nn_type == 'REN':
 elif args.nn_type == 'SSM':
     setup_name += '_middle' + str(args.dim_middle) + '_scaffolding' + str(args.dim_scaffolding)
 
-for res in res_normflow:
-    print(f"Num rollouts: {res['num_rollouts']}, Bounded test loss: {res['bounded test loss']}, Test num collisions: {res['test num collisions']}")
-    args.num_rollouts = res['num_rollouts']
-    args.batch_size = min(res['num_rollouts'], 256)
-    args.nominal_prior_std_scale = res['nominal_prior_std_scale']
-     # ----- SET UP LOGGER -----
-    save_folder = os.path.join(save_path, 'normflow', args.nn_type, setup_name, args.cont_type+'_'+str(res['num_rollouts']))
-    os.makedirs(save_folder)
-    logging.basicConfig(filename=os.path.join(save_folder, 'log'), format='%(asctime)s %(message)s', filemode='w')
-    logger = logging.getLogger('ren_controller_')
-    logger.setLevel(logging.DEBUG)
-    logger = WrapLogger(logger)
-    # train 
-    res_dict, filename_save, nfm = train_normflow(args, logger, save_folder)
+res = res_normflow[int(math.log(args.num_rollouts/8, base=2))]  
+args.batch_size = min(res['num_rollouts'], 256)
+args.nominal_prior_std_scale = res['nominal_prior_std_scale']
+    # ----- SET UP LOGGER -----
+save_folder = os.path.join(save_path, 'normflow', args.nn_type, setup_name, args.cont_type+'_'+str(res['num_rollouts']))
+os.makedirs(save_folder)
+logging.basicConfig(filename=os.path.join(save_folder, 'log'), format='%(asctime)s %(message)s', filemode='w')
+logger = logging.getLogger('ren_controller_')
+logger.setLevel(logging.DEBUG)
+logger = WrapLogger(logger)
+logger.info(f"Num rollouts: {res['num_rollouts']}, Bounded test loss: {res['bounded test loss']}, Test num collisions: {res['test num collisions']}")
 
+# train 
+res_dict, filename_save, nfm = train_normflow(args, logger, save_folder)
