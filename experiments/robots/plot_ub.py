@@ -177,21 +177,29 @@ results = [
 ]
 
 save_path = os.path.join(BASE_DIR, 'experiments', 'robots', 'saved_results', 'hyper_param_tuning')
+save_folder = os.path.join(BASE_DIR, 'experiments', 'robots', 'saved_results', 'plots')
 
-# Store all data for plotting
-plot_data = []
+load_plot_data = False
 
-for res in results:
-    folder = os.path.join(save_path, res['foldername'], f"trial_{res['best_trial']}_seed_0")
-    res_dict = pickle.load(open(os.path.join(folder, 'res_dict.pkl'), 'rb'))
-    train_loss = res_dict['test_loss'].detach().cpu()
-    # Add each train_loss value with its corresponding num_rollouts
-    for loss_value in train_loss:
-        plot_data.append({
-            'num_rollouts': res['num_rollouts'],
-            'test_loss': loss_value
-        })
-
+if load_plot_data:
+    # Store all data for plotting
+    plot_data = []
+    for res in results:
+        folder = os.path.join(save_path, res['foldername'], f"trial_{res['best_trial']}_seed_0")
+        res_dict = pickle.load(open(os.path.join(folder, 'res_dict.pkl'), 'rb'))
+        train_loss = res_dict['test_loss'].detach().cpu()
+        # Add each train_loss value with its corresponding num_rollouts
+        for loss_value in train_loss:
+            plot_data.append({
+                'num_rollouts': res['num_rollouts'],
+                'test_loss': loss_value
+            })
+else:
+    # Load plot data from pickle file
+    plot_data_filename = os.path.join(save_folder, 'plot_data.pkl')
+    with open(plot_data_filename, 'rb') as f:
+        plot_data = pickle.load(f)
+    print(f"Plot data loaded from: {plot_data_filename}")
 
 # Extract data for plotting
 num_rollouts_list = [entry['num_rollouts'] for entry in plot_data]
@@ -214,8 +222,14 @@ plt.grid(True, alpha=0.3)
 plt.tight_layout()
 
 # Save the plot
-save_folder = os.path.join(BASE_DIR, 'experiments', 'robots', 'saved_results', 'plots')
 if not os.path.exists(save_folder):
     os.makedirs(save_folder)
 plt.savefig(os.path.join(save_folder, 'test_loss_vs_rollouts.pdf'), dpi=300, bbox_inches='tight')
 plt.show()
+
+# Save plot_data as pickle file
+if not load_plot_data:
+    plot_data_filename = os.path.join(save_folder, 'plot_data.pkl')
+    with open(plot_data_filename, 'wb') as f:
+        pickle.dump(plot_data, f)
+    print(f"Plot data saved to: {plot_data_filename}")
