@@ -184,7 +184,7 @@ plot_data = []
 for res in results:
     folder = os.path.join(save_path, res['foldername'], f"trial_{res['best_trial']}_seed_0")
     res_dict = pickle.load(open(os.path.join(folder, 'res_dict.pkl'), 'rb'))
-    train_loss = res_dict['test_loss']
+    train_loss = res_dict['test_loss'].detach().cpu()
     # Add each train_loss value with its corresponding num_rollouts
     for loss_value in train_loss:
         plot_data.append({
