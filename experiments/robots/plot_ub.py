@@ -196,7 +196,7 @@ for res in results:
 # Extract data for plotting
 num_rollouts_list = [entry['num_rollouts'] for entry in plot_data]
 test_loss_list = [entry['test_loss'] for entry in plot_data]
-train_loss_list = [entry['train_loss'] for entry in plot_data]
+# train_loss_list = [entry['train_loss'] for entry in plot_data]
 
 # Create scatter plot
 plt.figure(figsize=(10, 6))
