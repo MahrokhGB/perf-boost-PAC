@@ -138,7 +138,10 @@ def objective(trial):
         
         # get the training loss
         if 'train_loss' in res_dict:
-            loss_diff_seeds.append(res_dict['train_loss'])
+            if method=='normflow':
+                loss_diff_seeds.append(res_dict['train_loss_av'])
+            else:
+                loss_diff_seeds.append(res_dict['train_loss'])
         elif 'bounded_train_loss' in res_dict:
             loss_diff_seeds.append(res_dict['bounded_train_loss'])
         elif 'original_train_loss' in res_dict:
