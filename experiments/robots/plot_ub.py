@@ -181,7 +181,7 @@ save_folder = os.path.join(BASE_DIR, 'experiments', 'robots', 'saved_results', '
 
 load_plot_data = False
 
-if load_plot_data:
+if not load_plot_data:
     # Store all data for plotting
     plot_data = []
     for res in results:
