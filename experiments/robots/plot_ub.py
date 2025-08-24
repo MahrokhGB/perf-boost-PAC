@@ -1,4 +1,4 @@
-# # python3 Simulations/perf-boost-PAC/experiments/robots/plot_ub.py --num-rollouts 8 --nn-type REN
+# # python3 experiments/robots/plot_ub.py --nn-type REN
 
 import pickle, sys, os
 from matplotlib.lines import Line2D
@@ -216,6 +216,8 @@ if not load_df:
             df['bounded test loss'].append(test_loss_value)
             df['ub'].append(next((item['ub'] for item in ub if item['num_rollouts'] == res['num_rollouts']), None))
     df = pd.DataFrame(df)
+    with open(os.path.join(save_folder, 'plot_data.pkl'), 'wb') as f:
+        pickle.dump(df, f)
 else:
     # Load DataFrame from pickle file
     df_filename = os.path.join(save_folder, 'plot_data.pkl')
