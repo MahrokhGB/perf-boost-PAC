@@ -165,3 +165,4 @@ experiments/*/saved_results/
 experiments/*/*/saved_results/
 *.pkl
 .DS_Store
+*.pdf

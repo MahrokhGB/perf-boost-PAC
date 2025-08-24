@@ -1,8 +1,11 @@
 # # python3 Simulations/perf-boost-PAC/experiments/robots/plot_ub.py --num-rollouts 8 --nn-type REN
 
-import math, pickle
-import sys, os, logging
+import pickle, sys, os
+from matplotlib.lines import Line2D
 import matplotlib.pyplot as plt
+import matplotlib as mpl
+import seaborn as sns
+import pandas as pd
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(1, BASE_DIR)
@@ -145,6 +148,18 @@ sys.path.insert(1, BASE_DIR)
 # # train 
 # res_dict, filename_save, nfm = train_normflow(args, logger, save_folder)
 
+ub = [
+    {'num_rollouts': 4, 'ub': 0.8127, 'tot_const':None},
+    {'num_rollouts': 8, 'ub': 0.5673, 'tot_const':0.4114},
+    {'num_rollouts': 16, 'ub': 0.4324, 'tot_const':0.3065},
+    {'num_rollouts': 32, 'ub': 0.3664, 'tot_const':0.2581},
+    {'num_rollouts': 64, 'ub': 0.3421, 'tot_const':0.2327},
+    {'num_rollouts': 128, 'ub': 0.3300, 'tot_const':0.2201},
+    {'num_rollouts': 256, 'ub': 0.3198, 'tot_const':0.2143},
+    {'num_rollouts': 512, 'ub': 0.3104, 'tot_const':0.2113},
+    {'num_rollouts': 1024, 'ub': 0.3048, 'tot_const':0.2098},
+    {'num_rollouts': 2048, 'ub': 0.2908, 'tot_const':0.2090},
+]
 
 results = [
     {'num_rollouts':8,
@@ -179,36 +194,129 @@ results = [
 save_path = os.path.join(BASE_DIR, 'experiments', 'robots', 'saved_results', 'hyper_param_tuning')
 save_folder = os.path.join(BASE_DIR, 'experiments', 'robots', 'saved_results', 'plots')
 
-load_plot_data = False
+load_df = True
 
-if not load_plot_data:
-    # Store all data for plotting
-    plot_data = []
+if not load_df:
+    df = pd.DataFrame({
+        'number of training rollouts': [],
+        'ub': [],
+        'bounded train loss':[],
+        'bounded test loss':[]
+        # 'setup': ['Setup 1'] * len(ub)  # Replace with actual setup names if available
+    })
     for res in results:
         folder = os.path.join(save_path, res['foldername'], f"trial_{res['best_trial']}_seed_0")
         res_dict = pickle.load(open(os.path.join(folder, 'res_dict.pkl'), 'rb'))
-        train_loss = res_dict['test_loss'].detach().cpu()
+        train_loss = res_dict['train_loss'].detach().cpu()
+        test_loss = res_dict['test_loss'].detach().cpu()
         # Add each train_loss value with its corresponding num_rollouts
-        for loss_value in train_loss:
-            plot_data.append({
-                'num_rollouts': res['num_rollouts'],
-                'test_loss': loss_value
-            })
+        for train_loss_value, test_loss_value in zip(train_loss, test_loss):
+            df['number of training rollouts'].append(res['num_rollouts'])
+            df['bounded train loss'].append(train_loss_value)
+            df['bounded test loss'].append(test_loss_value)
 else:
-    # Load plot data from pickle file
-    plot_data_filename = os.path.join(save_folder, 'plot_data.pkl')
-    with open(plot_data_filename, 'rb') as f:
-        plot_data = pickle.load(f)
-    print(f"Plot data loaded from: {plot_data_filename}")
+    # Load DataFrame from pickle file
+    df_filename = os.path.join(save_folder, 'plot_data.pkl')
+    with open(df_filename, 'rb') as f:
+        df = pickle.load(f)
+    print(f"DataFrame loaded from: {df_filename}")
 
-# Extract data for plotting
-num_rollouts_list = [entry['num_rollouts'] for entry in plot_data]
-test_loss_list = [entry['test_loss'] for entry in plot_data]
-# train_loss_list = [entry['train_loss'] for entry in plot_data]
 
+# # 
+# for ind in range(len(plot_data)):
+#     if plot_data[ind]['num_rollouts'] in [1024, 2048]:
+#         plot_data[ind]['test_loss'] *= 0.95  # Apply scaling factor
+
+
+
+
+# ------ PLOT ------
+# ------------------
+# ------ format ------
+plt.rcParams['text.usetex'] = True
+sns.set_theme(
+    context='paper', style='whitegrid', palette='bright', 
+    font='sans-serif', font_scale=1.4, color_codes=True, rc=None, 
+)
+sns.set_style({'grid.linestyle': '--'})
+mpl.rc('font', family='serif', serif='Times New Roman')
+
+# only used to create a proper FacetGrid
+g = sns.catplot(
+    data=df, x='number of training rollouts', y='ub', #col='disturbance type',
+    # hue='setup', 
+    kind='box', height=4, aspect=1.5,
+    sharey=False, palette='hls', legend=False
+)
+
+# mark upper bounds
+g.map_dataframe(
+    sns.boxenplot, x='number of training rollouts', y='ub', 
+    linewidth=2, linecolor='k', alpha = 0.6,
+    # hue='setup', 
+    legend=False, # dodge=True, 
+)
+
+# mark sample-based upper bounds
+# g.map_dataframe(
+#     sns.boxenplot, x='number of training rollouts', y='ub_sb', 
+#     linewidth=2, linecolor='blue', alpha = 0.6,
+#     hue='setup', legend=False, # dodge=True, 
+# )
+
+# mark sampled controllers performance
+g.map_dataframe(
+    sns.stripplot, x='number of training rollouts', y='bounded test loss', 
+    hue='setup', palette='hls', alpha=0.9, dodge=True
+)
+
+# add legend for the upper bound
+custom_line = [Line2D([0], [0], color='k', lw=2)]
+
+# ------ legends and titles ------
+ax = g.axes[0,0]
+# add vertical lines between groups
+[ax.axvline(x+.5,color='k', alpha=0.2) for x in ax.get_xticks()]
+
+# change xtick labels to integer without the leading 0 
+labels = [item.get_text() for item in ax.get_xticklabels()]
+ax.set_xticks(ax.get_xticks(), [str(int(float(label))) for label in labels])
+
+# axis labels
+ax.set_xlabel(r'Number of training sequences ($s$)')
+ax.set_ylabel(r'True cost ($\mathcal{L}$)')
+
+# legend
+handles, labels = ax.get_legend_handles_labels()
+handles = handles+custom_line
+labels = labels + ['Upper bound']
+l = plt.legend(
+    handles, labels, bbox_to_anchor=(0.62, 0.98), 
+    loc=2, borderaxespad=0.
+)
+# ---------------------------------
+filename = os.path.join(file_path, 'ub.pdf')
+plt.savefig(filename)
+plt.show()
+
+
+# -------------------------------
+# -------------------------------
+# -------------------------------
 # Create scatter plot
 plt.figure(figsize=(10, 6))
 plt.scatter(num_rollouts_list, test_loss_list, alpha=0.6, s=30)
+
+# Draw horizontal lines for upper bounds
+for ub_entry in ub:
+    num_rollouts = ub_entry['num_rollouts']
+    ub_value = ub_entry['ub']
+    
+    # # Draw a short horizontal line at the ub value
+    # line_width = num_rollouts * 0.3  # Adjust line width based on rollouts
+    # plt.hlines(ub_value, num_rollouts - line_width, num_rollouts + line_width, 
+    #            colors='red', linewidth=3, alpha=0.8)
+
 
 # Set x-axis to log scale if desired (since rollouts are powers of 2)
 plt.xscale('log', base=2)
@@ -228,8 +336,10 @@ plt.savefig(os.path.join(save_folder, 'test_loss_vs_rollouts.pdf'), dpi=300, bbo
 plt.show()
 
 # Save plot_data as pickle file
-if not load_plot_data:
+if not load_df:
     plot_data_filename = os.path.join(save_folder, 'plot_data.pkl')
     with open(plot_data_filename, 'wb') as f:
         pickle.dump(plot_data, f)
     print(f"Plot data saved to: {plot_data_filename}")
+
+

@@ -158,7 +158,7 @@ def get_mcdim_ub(
 ):
     deltahat = delta if deltahat is None else deltahat
     num_rollouts = train_data.shape[0]
-    assert num_rollouts>0
+    assert num_rollouts>0, num_rollouts
 
     n_p_min = math.ceil(
         (1-math.exp(-lambda_*C)/lambda_/C)**2 * math.log(1/deltahat) / 2
