@@ -214,6 +214,7 @@ if not load_df:
             df['number of training rollouts'].append(res['num_rollouts'])
             df['bounded train loss'].append(train_loss_value)
             df['bounded test loss'].append(test_loss_value)
+            df['ub'].append(next((item['ub'] for item in ub if item['num_rollouts'] == res['num_rollouts']), None))
     df = pd.DataFrame(df)
 else:
     # Load DataFrame from pickle file
