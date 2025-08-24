@@ -194,16 +194,16 @@ results = [
 save_path = os.path.join(BASE_DIR, 'experiments', 'robots', 'saved_results', 'hyper_param_tuning')
 save_folder = os.path.join(BASE_DIR, 'experiments', 'robots', 'saved_results', 'plots')
 
-load_df = True
+load_df = False
 
 if not load_df:
-    df = pd.DataFrame({
+    df = {
         'number of training rollouts': [],
         'ub': [],
         'bounded train loss':[],
         'bounded test loss':[]
         # 'setup': ['Setup 1'] * len(ub)  # Replace with actual setup names if available
-    })
+    }
     for res in results:
         folder = os.path.join(save_path, res['foldername'], f"trial_{res['best_trial']}_seed_0")
         res_dict = pickle.load(open(os.path.join(folder, 'res_dict.pkl'), 'rb'))
@@ -214,6 +214,7 @@ if not load_df:
             df['number of training rollouts'].append(res['num_rollouts'])
             df['bounded train loss'].append(train_loss_value)
             df['bounded test loss'].append(test_loss_value)
+    df = pd.DataFrame(df)
 else:
     # Load DataFrame from pickle file
     df_filename = os.path.join(save_folder, 'plot_data.pkl')
