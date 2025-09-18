@@ -65,7 +65,10 @@ def define_prior(args, training_param_names, save_path, logger):
                 prior_dict[name+'_scale'] = args.prior_std
             elif args.nominal_prior:
                 logger.info('[INFO] Prior distribution is the distribution over nominal controllers, with std scaled by %.4f.' % args.nominal_prior_std_scale)
-                vals = torch.stack([res[name] for res in res_dict_loaded], dim=0)
+                if args.nn_type=='REN':
+                    vals = torch.stack([res['emme.'+name] for res in res_dict_loaded], dim=0)
+                else:
+                    vals = torch.stack([res[name] for res in res_dict_loaded], dim=0)
                 # val and std computed elementwise. same shape as the training param
                 prior_dict[name+'_loc'] = vals.mean(dim=0)  
                 prior_dict[name+'_scale'] = vals.std(dim=0, correction=1) * args.nominal_prior_std_scale

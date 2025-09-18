@@ -19,16 +19,17 @@ res = [
 plt.rcParams['text.usetex'] = True
 sns.set_theme(
     context='paper', style='whitegrid', palette='bright', 
-    font='sans-serif', font_scale=1.4, color_codes=True, rc=None, 
+    font='sans-serif', font_scale=1.8, color_codes=True, rc=None, 
 )
 sns.set_style({'grid.linestyle': '--'})
 mpl.rc('font', family='serif', serif='Times New Roman')
 
-ren_color = '#CCE5FF'
-ssm_color = '#F19C99'
-
-# Create scatter plot for test cost vs training time
-# ...existing code...
+# pastel
+# ren_color = '#CCE5FF'
+# ssm_color = '#F19C99'
+# bright
+ren_color = sns.color_palette('hls')[3]
+ssm_color = sns.color_palette('hls')[0]
 
 # Create scatter plot for test cost vs training time
 fig, ax = plt.subplots(figsize=(8, 6))
@@ -56,14 +57,12 @@ for entry in ren_data:
               linewidth=1)
 
 # Plot SSM data  
-# ...existing code...
-# Plot SSM data  
 for entry in ssm_data:
     ax.scatter(entry['training time'], entry['test cost'],
               c=ssm_color,
               marker=method_styles[entry['method']]['marker'], 
               s=method_styles[entry['method']]['size'],
-              alpha=0.8,
+              alpha=0.9,
               edgecolors='black', 
               linewidth=1)
 
@@ -81,31 +80,36 @@ for i, method in enumerate(methods):
 
     if not method=='SVGD - 5':
         # Add text label for REN
-        ax.text(max_x+1700, center_y, method, fontsize=14, fontfamily='serif', ha='center', va='center')
+        ax.text(max_x+2100, center_y, method, ha='center', va='center')
     else:
-        ax.text(max_x-2500, center_y, method, fontsize=14, fontfamily='serif', ha='center', va='center')
+        ax.text(max_x-2500, center_y, method, ha='center', va='center')
 
 
 # Create simple legend for NN types only
 from matplotlib.lines import Line2D
-legend_elements = [
-    Line2D([0], [0], marker='o', color='w', markerfacecolor=ren_color, 
-           markersize=14, label='REN', markeredgecolor='black', markeredgewidth=1),
-    Line2D([0], [0], marker='o', color='w', markerfacecolor=ssm_color,
-           markersize=14, label='SSM', markeredgecolor='black', markeredgewidth=1)
-]
+# Get handles and labels from the stripplot
+handles, labels = ax.get_legend_handles_labels()
+# Create separate legend entries for REN and SSM bounded test loss
+ren_handle = handles[0] if len(handles) > 0 else Line2D([0], [0], marker='o', color='w', markerfacecolor=ren_color, markersize=8, alpha=0.9, linestyle='None')
+ssm_handle = handles[1] if len(handles) > 1 else Line2D([0], [0], marker='o', color='w', markerfacecolor=ssm_color, markersize=8, alpha=0.9, linestyle='None')
+# Create upper bound legend entry
+upper_bound_line = Line2D([0], [0], color='k', lw=3, alpha=0.8)
+# Create legend with separate entries for REN and SSM
+legend_handles = [ren_handle, ssm_handle, upper_bound_line]
+legend_labels = ['REN', 'SSM']
 
-ax.legend(handles=legend_elements, loc='upper right', frameon=True, fancybox=True, shadow=True)
+# legend_elements = [
+#     Line2D([0], [0], marker='o', color='w', markerfacecolor=ren_color, 
+#            markersize=10, label='REN', markeredgecolor='w', markeredgewidth=1),
+#     Line2D([0], [0], marker='o', color='w', markerfacecolor=ssm_color,
+#            markersize=10, label='SSM', markeredgecolor='w', markeredgewidth=1)
+# ]
+
+ax.legend(handles=legend_handles, labels=legend_labels, loc='upper right', frameon=True, fancybox=True, shadow=False)
 
 # Set labels and title
-ax.set_xlabel('Training time (seconds)', fontsize=16, fontfamily='serif')
-ax.set_ylabel('Test cost', fontsize=16, fontfamily='serif')
-# ax.set_title('Test Cost vs Training Time', fontsize=16, fontfamily='serif')
-
-# Set font for tick labels
-ax.tick_params(axis='both', which='major', labelsize=14)
-for label in ax.get_xticklabels() + ax.get_yticklabels():
-    label.set_fontfamily('serif')
+ax.set_xlabel('Training time (seconds)')
+ax.set_ylabel('Test cost')
 
 # Add grid for better readability
 ax.grid(True, alpha=0.3, linestyle='--')

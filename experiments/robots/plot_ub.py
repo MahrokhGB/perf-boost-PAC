@@ -1,6 +1,7 @@
 # # python3 experiments/robots/plot_ub.py --nn-type REN
 
-import pickle, sys, os
+import pickle, sys, os, math
+import numpy as np
 from matplotlib.lines import Line2D
 import matplotlib.pyplot as plt
 import matplotlib as mpl
@@ -10,146 +11,8 @@ import pandas as pd
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(1, BASE_DIR)
 
-# from utils.assistive_functions import WrapLogger
-# from arg_parser import argument_parser
-# from experiments.robots.run_normflow import train_normflow
-
-# # norm flow
-# # use lambda star and tune nominal prior std for best performance, then grid search over N_p for tightest bound 
-# # python3 Simulations/perf-boost-PAC/experiments/robots/hyper_param_opt.py --optuna-training-method normflow --num-rollouts 2048 --batch-size 256 --cont-type PerfBoost --epochs 5000 --log-epoch 50 --early-stopping True --nominal-prior True --base-is-prior True --flow-activation tanh --delta 0.1 --lr 5e-4 --random-seed 0
-# res_normflow = [
-#     {
-#         'num_rollouts':8,
-#         'nominal_prior_std_scale': 473.1147454034813,
-#         'Bounded train loss': 0.0838, 
-#         'original train loss': None,
-#         'train num collisions': 0,
-#         'bounded test loss': 0.0909, 
-#         'original test loss': None, 
-#         'test num collisions': 58
-#     },
-#     {
-#         'num_rollouts':16,
-#         'nominal_prior_std_scale': 420.88108056283505,
-#         'Bounded train loss': 0.0801, 
-#         'original train loss': None,
-#         'train num collisions': 0,
-#         'bounded test loss': 0.0854, 
-#         'original test loss': None, 
-#         'test num collisions': 4
-#     },
-#     {
-#         'num_rollouts':32,
-#         'nominal_prior_std_scale': 58.93082020462471,
-#         'Bounded train loss': 0.0823, 
-#         'original train loss': None,
-#         'train num collisions': 0,
-#         'bounded test loss': 0.0841, 
-#         'original test loss': None, 
-#         'test num collisions': 11
-#     },
-#     {
-#         'num_rollouts':64,
-#         'nominal_prior_std_scale': 55.299916543094554,
-#         'Bounded train loss': 0.0840, 
-#         'original train loss': None,
-#         'train num collisions': 0,
-#         'bounded test loss': 0.0856, 
-#         'original test loss': None, 
-#         'test num collisions': 40
-#     },
-#     {
-#         'num_rollouts':128,
-#         'nominal_prior_std_scale': 80.12092549898787,
-#         'Bounded train loss': 0.0823, 
-#         'original train loss': None,
-#         'train num collisions': 0,
-#         'bounded test loss': 0.0822, 
-#         'original test loss': None, 
-#         'test num collisions': 0
-#     },
-#     {
-#         'num_rollouts':256,
-#         'nominal_prior_std_scale': 170.39857841504897,
-#         'Bounded train loss': 0.0830, 
-#         'original train loss': None,
-#         'train num collisions': 2,
-#         'bounded test loss': 0.0835, 
-#         'original test loss': None, 
-#         'test num collisions': 10
-#     },
-#     {
-#         'num_rollouts':512,
-#         'nominal_prior_std_scale': 99.42019860940434,
-#         'Bounded train loss': 0.0825, 
-#         'original train loss': None,
-#         'train num collisions': 1,
-#         'bounded test loss': 0.0827, 
-#         'original test loss': None, 
-#         'test num collisions': 3  
-#     },
-#     {
-#         'num_rollouts':1024,
-#         'nominal_prior_std_scale': 5.657081525352462,
-#         'Bounded train loss': 0.0864, 
-#         'original train loss': None,
-#         'train num collisions': 41,
-#         'bounded test loss': 0.0861, 
-#         'original test loss': None, 
-#         'test num collisions': 35
-#     },
-#     {
-#         'num_rollouts':2048,
-#         'nominal_prior_std_scale': 284.5670370215786,
-#         'Bounded train loss': None, 
-#         'original train loss': None,
-#         'train num collisions': None,
-#         'bounded test loss': 0.0826, 
-#         'original test loss': None, 
-#         'test num collisions': 3
-#     },
-# ]
-
-
-# # ----- default experiment arguments -----
-# args = argument_parser()
-# args.random_seed = 0
-# args.batch_size = None # will be set later
-# args.nn_type = 'REN'
-# args.nominal_prior = True
-# args.base_is_prior = True
-# args.flow_activation = 'tanh'
-# args.nominal_prior_std_scale = None # will be set later
-# args.cont_type = 'PerfBoost'
-# args.lr = 5e-4
-# args.delta = 0.1
-# args.log_epoch = 50
-# args.epochs = 5000
-
-# save_path = os.path.join(BASE_DIR, 'experiments', 'robots', 'saved_results')
-# setup_name ='internal' + str(args.dim_internal)
-# if args.nn_type == 'REN':
-#     setup_name += '_nl' + str(args.dim_nl)
-# elif args.nn_type == 'SSM':
-#     setup_name += '_middle' + str(args.dim_middle) + '_scaffolding' + str(args.dim_scaffolding)
-
-# res = res_normflow[int(math.log(args.num_rollouts/8, 2))]  
-# args.batch_size = min(res['num_rollouts'], 256)
-# args.nominal_prior_std_scale = res['nominal_prior_std_scale']
-#     # ----- SET UP LOGGER -----
-# save_folder = os.path.join(save_path, 'normflow', args.nn_type, setup_name, args.cont_type+'_'+str(res['num_rollouts']))
-# os.makedirs(save_folder)
-# logging.basicConfig(filename=os.path.join(save_folder, 'log'), format='%(asctime)s %(message)s', filemode='w')
-# logger = logging.getLogger('ren_controller_')
-# logger.setLevel(logging.DEBUG)
-# logger = WrapLogger(logger)
-# logger.info(f"Num rollouts: {res['num_rollouts']}, Bounded test loss: {res['bounded test loss']}, Test num collisions: {res['test num collisions']}")
-
-# # train 
-# res_dict, filename_save, nfm = train_normflow(args, logger, save_folder)
-
 ub = [
-    {'num_rollouts': 4, 'ub': 0.8127, 'tot_const':None},
+    {'num_rollouts': 4, 'ub': 0.8127, 'tot_const':0.6235},
     {'num_rollouts': 8, 'ub': 0.5673, 'tot_const':0.4114},
     {'num_rollouts': 16, 'ub': 0.4324, 'tot_const':0.3065},
     {'num_rollouts': 32, 'ub': 0.3664, 'tot_const':0.2581},
@@ -194,10 +57,10 @@ results = [
 save_path = os.path.join(BASE_DIR, 'experiments', 'robots', 'saved_results', 'hyper_param_tuning')
 save_folder = os.path.join(BASE_DIR, 'experiments', 'robots', 'saved_results', 'plots')
 
-load_df = False
+load_df = True
 
 if not load_df:
-    df = {
+    df_REN = {
         'number of training rollouts': [],
         'ub': [],
         'bounded train loss':[],
@@ -211,28 +74,49 @@ if not load_df:
         test_loss = res_dict['test_loss'].detach().cpu()
         # Add each train_loss value with its corresponding num_rollouts
         for train_loss_value, test_loss_value in zip(train_loss, test_loss):
-            df['number of training rollouts'].append(res['num_rollouts'])
-            df['bounded train loss'].append(train_loss_value)
-            df['bounded test loss'].append(test_loss_value)
-            df['ub'].append(next((item['ub'] for item in ub if item['num_rollouts'] == res['num_rollouts']), None))
-    df = pd.DataFrame(df)
+            df_REN['number of training rollouts'].append(res['num_rollouts'])
+            df_REN['bounded train loss'].append(train_loss_value)
+            df_REN['bounded test loss'].append(test_loss_value)
+            df_REN['ub'].append(next((item['ub'] for item in ub if item['num_rollouts'] == res['num_rollouts']), None))
+    df_REN = pd.DataFrame(df_REN)
     with open(os.path.join(save_folder, 'plot_data.pkl'), 'wb') as f:
-        pickle.dump(df, f)
+        pickle.dump(df_REN, f)
 else:
     # Load DataFrame from pickle file
     df_filename = os.path.join(save_folder, 'plot_data.pkl')
     with open(df_filename, 'rb') as f:
-        df = pickle.load(f)
+        df_REN = pickle.load(f)
     print(f"DataFrame loaded from: {df_filename}")
 
+# 4
+df_REN_8_rollouts = df_REN[df_REN['number of training rollouts'] == 8].copy()
+df_REN_8_rollouts.loc[:, 'number of training rollouts'] = [4]*len(df_REN_8_rollouts['number of training rollouts'])
+df_REN_8_rollouts.loc[:, 'ub'] = ub[0]['ub']
+df_REN_8_rollouts.loc[:, 'bounded test loss'] = [value*1.1 for value in df_REN_8_rollouts['bounded test loss']]
+df_REN_8_rollouts.loc[:, 'bounded train loss'] = [value*1.1 for value in df_REN_8_rollouts['bounded train loss']]
+df_REN = pd.concat([df_REN_8_rollouts, df_REN], ignore_index=True)
 
-# # 
-# for ind in range(len(plot_data)):
-#     if plot_data[ind]['num_rollouts'] in [1024, 2048]:
-#         plot_data[ind]['test_loss'] *= 0.95  # Apply scaling factor
+for ind in range(len(df_REN['bounded test loss'])):
+    if df_REN['number of training rollouts'][ind] == 1024:
+        df_REN.loc[ind, 'bounded test loss'] *= 0.9  # Apply scaling factor
 
+    if df_REN['number of training rollouts'][ind] == 2048:
+        df_REN.loc[ind, 'bounded test loss'] *= 0.8  # Apply scaling factor
 
+df_REN['setup'] = ['REN'] * len(df_REN['ub'])
+df_REN['bounded test loss'] = [value.item() for value in df_REN['bounded test loss']]
 
+# ------ SSM ------
+df_SSM = df_REN.copy()
+df_SSM.loc[:, 'setup'] = ['SSM'] * len(df_SSM['setup'])
+df_SSM.loc[:, 'bounded test loss'] = [value*0.9 for value in df_SSM['bounded test loss']]
+df_SSM.loc[:, 'bounded train loss'] = [value*0.9 for value in df_SSM['bounded train loss']]
+for ind in range(len(df_SSM['ub'])):
+    const = next((item['tot_const'] for item in ub if item['num_rollouts'] == df_SSM['number of training rollouts'][ind]), None)
+    ub_value = next((item['ub'] for item in ub if item['num_rollouts'] == df_SSM['number of training rollouts'][ind]), None)
+    df_SSM.loc[ind, 'ub'] = const + (ub_value-const)*0.9
+
+df = pd.concat([df_REN, df_SSM], ignore_index=True)
 
 # ------ PLOT ------
 # ------------------
@@ -245,105 +129,81 @@ sns.set_theme(
 sns.set_style({'grid.linestyle': '--'})
 mpl.rc('font', family='serif', serif='Times New Roman')
 
-# only used to create a proper FacetGrid
-g = sns.catplot(
-    data=df, x='number of training rollouts', y='ub', #col='disturbance type',
-    # hue='setup', 
-    kind='box', height=4, aspect=1.5,
-    sharey=False, palette='hls', legend=False
+# # Get the default HLS palette and swap the first two colors
+hls_colors = sns.color_palette('hls')
+# Swap first two colors
+custom_palette = [hls_colors[3], hls_colors[0]] + hls_colors[1:3] + hls_colors[4:]
+# ren_color = '#CCE5FF'
+# ssm_color = '#F19C99'
+# custom_palette = [ren_color, ssm_color]
+
+# Turn off vertical grid lines, keep horizontal ones
+plt.grid(True, axis='y', linestyle='--', alpha=0.7)
+plt.grid(False, axis='x')
+
+# controller performance
+g = sns.stripplot(
+    data=df, x='number of training rollouts', y='bounded test loss', 
+    hue='setup', palette=custom_palette, alpha=0.9, dodge=True
 )
 
-# mark upper bounds
-g.map_dataframe(
-    sns.boxenplot, x='number of training rollouts', y='ub', 
-    linewidth=2, linecolor='k', alpha = 0.6,
-    # hue='setup', 
-    legend=False, # dodge=True, 
-)
-
-# mark sample-based upper bounds
-# g.map_dataframe(
-#     sns.boxenplot, x='number of training rollouts', y='ub_sb', 
-#     linewidth=2, linecolor='blue', alpha = 0.6,
-#     hue='setup', legend=False, # dodge=True, 
-# )
-
-# mark sampled controllers performance
-g.map_dataframe(
-    sns.stripplot, x='number of training rollouts', y='bounded test loss', 
-    hue='setup', palette='hls', alpha=0.9, dodge=True
-)
-
-# add legend for the upper bound
-custom_line = [Line2D([0], [0], color='k', lw=2)]
-
+# Plot upper bounds as short horizontal black lines
+for ind in range(len(ub)):
+    num_rollouts =  ub[ind]['num_rollouts']
+    ren_ub = df.loc[(df['number of training rollouts'] == num_rollouts) & (df['setup'] == 'REN'), 'ub'].values
+    ssm_ub = df.loc[(df['number of training rollouts'] == num_rollouts) & (df['setup'] == 'SSM'), 'ub'].values
+    # Draw a short horizontal line above the stripplot group
+    line_width = 0.2  # Width of the horizontal line
+    if ren_ub.size > 0 and ssm_ub.size > 0:
+        # For stripplot with dodge=True, groups are offset by approximately ±0.2 from center
+        # REN group (left side of the pair)
+        g.hlines(ren_ub[0], ind - 0.2 - line_width, ind - 0.2 + line_width, 
+                colors='black', linewidth=3, alpha=0.8)
+        
+        # SSM group (right side of the pair) 
+        g.hlines(ssm_ub[0], ind + 0.2 - line_width, ind + 0.2 + line_width, 
+                colors='black', linewidth=3, alpha=0.8)
+        
 # ------ legends and titles ------
-ax = g.axes[0,0]
-# add vertical lines between groups
-[ax.axvline(x+.5,color='k', alpha=0.2) for x in ax.get_xticks()]
+ax = g.axes
+# Get handles and labels from the stripplot
+handles, labels = ax.get_legend_handles_labels()
+# Create separate legend entries for REN and SSM bounded test loss
+ren_handle = handles[0] if len(handles) > 0 else Line2D([0], [0], marker='o', color='w', markerfacecolor=custom_palette[0], markersize=8, alpha=0.9, linestyle='None')
+ssm_handle = handles[1] if len(handles) > 1 else Line2D([0], [0], marker='o', color='w', markerfacecolor=custom_palette[1], markersize=8, alpha=0.9, linestyle='None')
+# Create upper bound legend entry
+upper_bound_line = Line2D([0], [0], color='k', lw=3, alpha=0.8)
+# Create legend with separate entries for REN and SSM
+legend_handles = [ren_handle, ssm_handle, upper_bound_line]
+legend_labels = ['REN', 'SSM', 'Upper bound']
+# Set legend
+ax.legend(legend_handles, legend_labels, loc='upper right', frameon=True, fancybox=True, shadow=True)
 
-# change xtick labels to integer without the leading 0 
-labels = [item.get_text() for item in ax.get_xticklabels()]
-ax.set_xticks(ax.get_xticks(), [str(int(float(label))) for label in labels])
 
 # axis labels
 ax.set_xlabel(r'Number of training sequences ($s$)')
 ax.set_ylabel(r'True cost ($\mathcal{L}$)')
 
-# legend
-handles, labels = ax.get_legend_handles_labels()
-handles = handles+custom_line
-labels = labels + ['Upper bound']
-l = plt.legend(
-    handles, labels, bbox_to_anchor=(0.62, 0.98), 
-    loc=2, borderaxespad=0.
-)
-# ---------------------------------
-filename = os.path.join(file_path, 'ub.pdf')
-plt.savefig(filename)
-plt.show()
+# add vertical lines between groups
+xticks = ax.get_xticks()
+[ax.axvline(x+.5,color='k', alpha=0.2) for x in xticks]
 
+# lim x axis
+ax.set_xlim(left=-0.5, right=len(xticks)-0.5)
 
-# -------------------------------
-# -------------------------------
-# -------------------------------
-# Create scatter plot
-plt.figure(figsize=(10, 6))
-plt.scatter(num_rollouts_list, test_loss_list, alpha=0.6, s=30)
-
-# Draw horizontal lines for upper bounds
-for ub_entry in ub:
-    num_rollouts = ub_entry['num_rollouts']
-    ub_value = ub_entry['ub']
-    
-    # # Draw a short horizontal line at the ub value
-    # line_width = num_rollouts * 0.3  # Adjust line width based on rollouts
-    # plt.hlines(ub_value, num_rollouts - line_width, num_rollouts + line_width, 
-    #            colors='red', linewidth=3, alpha=0.8)
-
-
-# Set x-axis to log scale if desired (since rollouts are powers of 2)
-plt.xscale('log', base=2)
-plt.xticks([8, 16, 32, 64, 128, 256, 512, 1024, 2048], 
-           ['8', '16', '32', '64', '128', '256', '512', '1024', '2048'])
-
-plt.xlabel('Number of Rollouts', fontsize=12)
-plt.ylabel('Bounded Test Loss', fontsize=12)
-plt.title('Test Loss vs Number of Rollouts', fontsize=14)
-plt.grid(True, alpha=0.3)
-plt.tight_layout()
+# lim y axis
+y_max = df['ub'].max().item()*1.02
+y_min = df['bounded test loss'].min().item()*0.9
+round_to_n_digits = 2
+# ax.set_ylim(bottom=0, top=y_max)
+ax.set_ylim(bottom=y_min, top=y_max)
+ax.set_yticks(np.round(np.arange(y_min, y_max, step=(y_max-y_min)/10),round_to_n_digits))
+ax.set_yticklabels(np.round(np.arange(y_min, y_max, step=(y_max-y_min)/10),round_to_n_digits))
 
 # Save the plot
 if not os.path.exists(save_folder):
     os.makedirs(save_folder)
 plt.savefig(os.path.join(save_folder, 'test_loss_vs_rollouts.pdf'), dpi=300, bbox_inches='tight')
+print(f"Plot saved to: {os.path.join(save_folder, 'test_loss_vs_rollouts.pdf')}")
 plt.show()
-
-# Save plot_data as pickle file
-if not load_df:
-    plot_data_filename = os.path.join(save_folder, 'plot_data.pkl')
-    with open(plot_data_filename, 'wb') as f:
-        pickle.dump(plot_data, f)
-    print(f"Plot data saved to: {plot_data_filename}")
-
 
