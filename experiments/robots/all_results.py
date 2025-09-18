@@ -383,3 +383,31 @@ if __name__=='__main__':
             [i/500*100 for i in res_32['test num collisions']], 
             confidence=95, n_digits=4
         )
+
+
+
+# -----------------------------------------------------
+# ------------------- SCALABILITY ---------------------
+# -----------------------------------------------------
+# SVGD - 1 particle - REN - nominal prior - tuned nominal_prior_std_scale
+
+# SVGD_09_18_09_37_44: dim-internal 16, dim-nl 8, nominal_prior_std_scale: 400.1972317244533, 2176 parameters 
+# Bounded train loss = 0.2006, original train loss = 52.1457, train num collisions =  52, True bounded test loss = 0.1956, true original test loss = 50.82 (approximated using 500 test rollouts)., test num collisions =  51
+# Elapsed time 535.48 sec (1000 Epochs)
+
+# SVGD_09_18_09_38_17: dim-internal 8, dim-nl 16, nominal_prior_std_scale
+# SVGD_09_18_09_38_28: dim-internal 16, dim-nl 16, nominal_prior_std_scale
+
+# SVGD_09_18_09_44_00: dim-internal 32, dim-nl 8, nominal_prior_std_scale 62.18909377156718, 6720 parameters
+# Bounded train loss = 0.2322, original train loss = 60.6055, train num collisions =  61, True bounded test loss = 0.2251, true original test loss = 58.72 (approximated using 500 test rollouts)., test num collisions =  59
+# Elapsed time 603.79 sec (750 Epochs)
+
+# SVGD_09_18_09_44_10: dim-internal 8, dim-nl 32, nominal_prior_std_scale , 2880 parameters
+
+# SVGD_09_18_09_44_25: dim-internal 16, dim-nl 32, nominal_prior_std_scale , 4960 parameters
+
+# SVGD_09_18_09_44_35: dim-internal 32, dim-nl 16, nominal_prior_std_scale 30.76649151751553, 8032 parameters
+# Bounded train loss = 0.2449, original train loss = 64.0284, train num collisions =  64True bounded test loss = 0.2434, true original test loss = 63.61 (approximated using 500 test rollouts)., test num collisions =  64
+# Elapsed time 774.43 sec (600 Epochs)
+
+# SVGD_09_18_09_44_42: dim-internal 32, dim-nl 32, nominal_prior_std_scale , 11040 parameters
