@@ -66,7 +66,7 @@ def define_prior(args, training_param_names, save_path, logger):
             elif args.nominal_prior:
                 logger.info('[INFO] Prior distribution is the distribution over nominal controllers, with std scaled by %.4f.' % args.nominal_prior_std_scale)
                 if args.nn_type=='REN':
-                    if res_dict_loaded[0].keys()[0].startswith('emme.'):   # for compatibility with old saved models. the if condition should be removed in future versions. 
+                    if list(res_dict_loaded[0].keys())[0].startswith('emme.'):   # for compatibility with old saved models. the if condition should be removed in future versions.
                         vals = torch.stack([res['emme.'+name] for res in res_dict_loaded], dim=0)
                 else:
                     vals = torch.stack([res[name] for res in res_dict_loaded], dim=0)
