@@ -77,7 +77,7 @@ def argument_parser():
     parser.add_argument('--tol-percentage', type=float, default=0.05, help='Early stopping if the validation loss does not improve by at least tol percentage during the last n_logs_no_change logged epochs. Default is 0.05%.')
     
     # inference
-    parser.add_argument('--prior-std', type=float, default=7, help='Gaussian prior std. Default is 7.')
+    parser.add_argument('--prior-std', type=float, default=-1, help='Gaussian prior std. Default is 7.')
     # inference - SVGD
     parser.add_argument('--num-particles', type=int, default=1, help='Number of SVGD particles. Default is 1.')
     parser.add_argument('--init-from-prior', type=str2bool, default=True, help='Initialize particles by sampling from the prior. Default is True.')
@@ -97,7 +97,7 @@ def argument_parser():
     # parser.add_argument('--max-gibbs-lambda', type=str2bool, default=False , help='Use max tempretaure for the Gibbs distribution. Default is False.')
     # inference - data-dependent prior
     parser.add_argument('--nominal-prior', type=str2bool, default=False, help='Center the prior at a controller learned from nominal noise-free initial conditions. Default is False.')
-    parser.add_argument('--nominal-prior-std-scale', type=float, default=50, help='Scaling for the std of the nominal prior. Default is 50.')
+    parser.add_argument('--nominal-prior-std-scale', type=float, default=-1, help='Scaling for the std of the nominal prior. Default is 50.')
     parser.add_argument('--data-dep-prior', type=str2bool, default=False, help='Learn the prior from a subset of data. Default is False.')
     parser.add_argument('--num-rollouts-prior', type=int, default=0, help='Number of rollouts used for training the prior.')
 
@@ -138,6 +138,19 @@ def argument_parser():
     if args.gibbs_lambda == -1:
         args.gibbs_lambda = (8*args.num_rollouts*math.log(1/args.delta))**0.5
 
+    # prior std
+    if not args.nominal_prior:
+        if args.prior_std == -1:
+            args.prior_std = 7.0
+        assert args.nominal_prior_std_scale == -1, 'nominal_prior_std_scale should not be set if nominal_prior is False.'
+    else:
+        if args.nominal_prior_std_scale == -1:
+            args.nominal_prior_std_scale = 50.0
+            assert args.prior_std == -1, 'prior_std should not be set if nominal_prior is True and nominal_prior_std_scale is set.'
+        if args.prior_std == -1:
+            args.prior_std = 7.0
+        # NOTE: prior std can be either fixed or a scaling of the std of the nominal controllers.
+        
     # # max lambda
     # if args.max_gibbs_lambda:
     #     thresh_eps_lambda = 0.2

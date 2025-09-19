@@ -72,7 +72,12 @@ def define_prior(args, training_param_names, save_path, logger):
                         vals = torch.stack([res[name] for res in res_dict_loaded], dim=0)
                 # val and std computed elementwise. same shape as the training param
                 prior_dict[name+'_loc'] = vals.mean(dim=0)  
-                prior_dict[name+'_scale'] = vals.std(dim=0, correction=1) * args.nominal_prior_std_scale
+                if not args.nominal_prior_std_scale==-1:
+                    prior_dict[name+'_scale'] = vals.std(dim=0, correction=1) * args.nominal_prior_std_scale
+                elif not args.prior_std==-1:
+                    prior_dict[name+'_scale'] = args.prior_std
+                else:
+                    raise ValueError("Either --nominal-prior-std-scale or --prior-std should be set to a positive value.")
             else:
                 prior_dict[name+'_loc'] = 0
                 prior_dict[name+'_scale'] = args.prior_std
