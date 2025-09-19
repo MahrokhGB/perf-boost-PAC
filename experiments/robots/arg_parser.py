@@ -144,13 +144,13 @@ def argument_parser():
             args.prior_std = 7.0
         assert args.nominal_prior_std_scale == -1, 'nominal_prior_std_scale should not be set if nominal_prior is False.'
     else:
-        if args.nominal_prior_std_scale == -1:
-            args.nominal_prior_std_scale = 50.0
-            assert args.prior_std == -1, 'prior_std should not be set if nominal_prior is True and nominal_prior_std_scale is set.'
-        if args.prior_std == -1:
-            args.prior_std = 7.0
         # NOTE: prior std can be either fixed or a scaling of the std of the nominal controllers.
-        
+        if not args.prior_std == -1:
+            assert args.nominal_prior_std_scale == -1, 'nominal_prior_std_scale should not be set if prior_std is set.'
+        else:
+            if args.nominal_prior_std_scale == -1:
+                args.nominal_prior_std_scale = 50.0
+
     # # max lambda
     # if args.max_gibbs_lambda:
     #     thresh_eps_lambda = 0.2
