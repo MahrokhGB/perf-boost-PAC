@@ -122,7 +122,7 @@ def argument_parser():
         args.batch_size = args.num_rollouts if args.num_rollouts<=256 else 256
 
     if args.epochs==-1 or args.epochs is None:
-        args.epochs = 1000 if args.col_av else 50
+        args.epochs = 5000 if args.col_av else 50
 
     if args.lr==-1 or args.lr is None:
         args.lr = 2e-3 if args.col_av else 5e-3

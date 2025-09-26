@@ -63,15 +63,28 @@ def define_tunables(args):
                 },
             ]
         else:
-            tunables = [
-                {
-                    'name':'nominal_prior_std_scale',
-                    'nominal':args.nominal_prior_std_scale,
-                    'min':args.nominal_prior_std_scale/args.optuna_search_scale,
-                    'max':args.nominal_prior_std_scale*args.optuna_search_scale,
-                    'log_scale':True
-                }
-            ]
+            if not args.nominal_prior_std_scale==-1 and args.prior_std==-1:
+                tunables = [
+                    {
+                        'name':'nominal_prior_std_scale',
+                        'nominal':args.nominal_prior_std_scale,
+                        'min':args.nominal_prior_std_scale/args.optuna_search_scale,
+                        'max':args.nominal_prior_std_scale*args.optuna_search_scale,
+                        'log_scale':True
+                    }
+                ]
+            elif not args.prior_std==-1 and args.nominal_prior_std_scale==-1:
+                tunables = [
+                    {
+                        'name':'prior_std',
+                        'nominal':args.prior_std,
+                        'min':args.prior_std/args.optuna_search_scale, 
+                        'max':args.prior_std*args.optuna_search_scale, 
+                        'log_scale':True
+                    },
+                ]
+            else:
+                raise ValueError("When using nominal prior, only one of prior_std or nominal_prior_std_scale should be set to -1.")
         # tunables +=[{
                 #     'name':'gibbs_lambda',
                 #     'nominal':args.gibbs_lambda,
