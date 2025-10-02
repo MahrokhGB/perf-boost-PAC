@@ -12,10 +12,11 @@ from utils.assistive_functions import WrapLogger
 
 def define_tunables(args):
     """Set tunable hyperparameters for the experiment."""
+    tunables = []
     # hidden_size = trial.suggest_int('hidden_size', 128, 512)
     if method=='empirical':
         if args.nn_type=='REN':
-            tunables = [
+            tunables += [
                 {
                     'name':'cont_init_std',
                     'nominal':args.cont_init_std,
@@ -32,7 +33,7 @@ def define_tunables(args):
                 # }
             ]
         elif args.nn_type=='SSM':
-            tunables = [
+            tunables += [
                 {
                     'name':'rmin',
                     'nominal':args.rmin,
@@ -42,7 +43,7 @@ def define_tunables(args):
                 },
             ]
         else:
-            tunables = [
+            tunables += [
                 {
                     'name':'cont_init_std',
                     'nominal':args.cont_init_std,
@@ -54,7 +55,7 @@ def define_tunables(args):
     elif method in ['SVGD', 'normflow']:
         if args.optuna_tune_prior_std:
             if not args.nominal_prior:
-                tunables = [
+                tunables += [
                     {
                         'name':'prior_std',
                         'nominal':args.prior_std,
@@ -65,7 +66,7 @@ def define_tunables(args):
                 ]
             else:
                 if not args.nominal_prior_std_scale==-1 and args.prior_std==-1:
-                    tunables = [
+                    tunables += [
                         {
                             'name':'nominal_prior_std_scale',
                             'nominal':args.nominal_prior_std_scale,
@@ -75,7 +76,7 @@ def define_tunables(args):
                         }
                     ]
                 elif not args.prior_std==-1 and args.nominal_prior_std_scale==-1:
-                    tunables = [
+                    tunables += [
                         {
                             'name':'prior_std',
                             'nominal':args.prior_std,
