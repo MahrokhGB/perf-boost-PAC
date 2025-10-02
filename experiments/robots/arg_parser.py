@@ -106,7 +106,9 @@ def argument_parser():
     parser.add_argument('--optuna-search-scale', type=float, default=10, help='Set search space for hyperparameter optimization with Optuna to [nominal/scale, nominal*scale]. Default is 10.')
     parser.add_argument('--optuna-training-method', type=str, default=None, help='Training method for which hyperparameter optimization is performed. Can be empirical, normflow, or SVGD.')
     parser.add_argument('--optuna-all-seeds', type=str2bool, default=False, help='Hyper-parameter optimization based on average performance over 5 random seeds. Default is False.')
-    
+    parser.add_argument('--optuna-tune-lr', type=str2bool, default=False, help='Also tune the learning rate. Default is False.')
+    parser.add_argument('--optuna-tune-gibbs-lambda', type=str2bool, default=False, help='Also tune gibbs lambda. Default is False.')
+    parser.add_argument('--optuna-tune-prior-std', type=str2bool, default=True, help='Tune prior std (or nominal-prior-std-scale). Default is True.')
 
     args = parser.parse_args()
 
@@ -247,7 +249,12 @@ def print_args(args, method='empirical'):
         msg +=  '-- prior std: %.2e' % args.prior_std 
     elif args.nominal_prior: 
         msg += 'based on nominal controllers trained from noise-free initial conditions with different random seeds.'
-        msg += ' -- nominal prior std is scaled by: %.2f' % args.nominal_prior_std_scale
+        if not args.nominal_prior_std_scale==-1 and args.prior_std==-1:
+            msg += ' -- nominal prior std is scaled by: %.2f' % args.nominal_prior_std_scale
+        elif not args.prior_std==-1 and args.nominal_prior_std_scale==-1:
+            msg += ' -- prior std: %.2e' % args.prior_std
+        else:
+            raise ValueError("When using nominal prior, only one of prior_std or nominal_prior_std_scale should be set to -1.")
     else:
         msg += 'centered at zero -- prior std: %.2e' % args.prior_std
     

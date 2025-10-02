@@ -52,28 +52,8 @@ def define_tunables(args):
                 }
             ]
     elif method in ['SVGD', 'normflow']:
-        if not args.nominal_prior:
-            tunables = [
-                {
-                    'name':'prior_std',
-                    'nominal':args.prior_std,
-                    'min':args.prior_std/args.optuna_search_scale, 
-                    'max':args.prior_std*args.optuna_search_scale, 
-                    'log_scale':True
-                },
-            ]
-        else:
-            if not args.nominal_prior_std_scale==-1 and args.prior_std==-1:
-                tunables = [
-                    {
-                        'name':'nominal_prior_std_scale',
-                        'nominal':args.nominal_prior_std_scale,
-                        'min':args.nominal_prior_std_scale/args.optuna_search_scale,
-                        'max':args.nominal_prior_std_scale*args.optuna_search_scale,
-                        'log_scale':True
-                    }
-                ]
-            elif not args.prior_std==-1 and args.nominal_prior_std_scale==-1:
+        if args.optuna_tune_prior_std:
+            if not args.nominal_prior:
                 tunables = [
                     {
                         'name':'prior_std',
@@ -84,14 +64,36 @@ def define_tunables(args):
                     },
                 ]
             else:
-                raise ValueError("When using nominal prior, only one of prior_std or nominal_prior_std_scale should be set to -1.")
-        # tunables +=[{
-                #     'name':'gibbs_lambda',
-                #     'nominal':args.gibbs_lambda,
-                #     'min':args.gibbs_lambda/args.optuna_search_scale,
-                #     'max':args.gibbs_lambda*args.optuna_search_scale,
-                #     'log_scale':True
-                # }]
+                if not args.nominal_prior_std_scale==-1 and args.prior_std==-1:
+                    tunables = [
+                        {
+                            'name':'nominal_prior_std_scale',
+                            'nominal':args.nominal_prior_std_scale,
+                            'min':args.nominal_prior_std_scale/args.optuna_search_scale,
+                            'max':args.nominal_prior_std_scale*args.optuna_search_scale,
+                            'log_scale':True
+                        }
+                    ]
+                elif not args.prior_std==-1 and args.nominal_prior_std_scale==-1:
+                    tunables = [
+                        {
+                            'name':'prior_std',
+                            'nominal':args.prior_std,
+                            'min':args.prior_std/args.optuna_search_scale, 
+                            'max':args.prior_std*args.optuna_search_scale, 
+                            'log_scale':True
+                        },
+                    ]
+                else:
+                    raise ValueError("When using nominal prior, only one of prior_std or nominal_prior_std_scale should be set to -1.")
+        if args.optuna_tune_gibbs_lambda:
+            tunables +=[{
+                'name':'gibbs_lambda',
+                'nominal':args.gibbs_lambda,
+                'min':args.gibbs_lambda/args.optuna_search_scale,
+                'max':args.gibbs_lambda*args.optuna_search_scale,
+                'log_scale':True
+            }]
         # if method=='normflow':
         #     tunables += [
                 # {
@@ -105,7 +107,7 @@ def define_tunables(args):
     else:
         raise ValueError("Method not recognized. Choose from 'empirical', 'SVGD', or 'normflow'.")
     
-    if TUNE_LR:
+    if args.optuna_tune_lr:
         tunables += [
             {
                 'name':'lr',
@@ -196,7 +198,6 @@ optuna.logging.disable_default_handler()  # Disable the default handler.
 optuna.logging.enable_propagation()  # Propagate logs to the root logger.
 
 # define the tunables based on the method
-TUNE_LR = False
 RANDOM_SEEDS = [500, 0, 5, 412, 719] if args.optuna_all_seeds else [0]
 tunables = define_tunables(args)
 
