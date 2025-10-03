@@ -183,6 +183,15 @@ class SVGDCont():
                     epoch, epochs, duration, self.svgd.log_prob_particles
                 )
 
+                # compute train loss
+                train_res = 0
+                # iterate over all data batches
+                num_samples = 0
+                for train_data_batch in train_dataloader:
+                    train_res += self.eval_rollouts(train_data_batch, loss_fn=loss_fn, count_collisions=False) * train_data_batch.shape[0]
+                    num_samples += train_data_batch.shape[0]
+                message +=  ', Train Loss: {:2.4f}'.format(train_res/num_samples)
+
                 # if validation data is provided  -> compute the valid log-likelihood
                 if valid_data is not None:
                     # evaluate on validation set
