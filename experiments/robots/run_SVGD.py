@@ -152,11 +152,9 @@ def train_svgd(args, logger, save_folder):
 
     if args.init_from_prior:
         logger.info('[INFO] Initializing particles from prior.')
-        INIT_PARTICLE_STD_SCALE = 1
-        PRIOR_STDP_SCALE = 50
         initial_particles = Normal(
             gibbs_posterior.prior.mean().reshape(-1), 
-            gibbs_posterior.prior.stddev().reshape(-1)/PRIOR_STDP_SCALE/INIT_PARTICLE_STD_SCALE
+            gibbs_posterior.prior.stddev().reshape(-1)/args.init_particle_std_scale
         ).sample([args.num_particles]).to(device)
     else:
         initial_particles = Normal(0, args.cont_init_std).sample(dim).to(device)

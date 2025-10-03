@@ -81,6 +81,7 @@ def argument_parser():
     # inference - SVGD
     parser.add_argument('--num-particles', type=int, default=1, help='Number of SVGD particles. Default is 1.')
     parser.add_argument('--init-from-prior', type=str2bool, default=True, help='Initialize particles by sampling from the prior. Default is True.')
+    parser.add_argument('--init-particle-std-scale', type=int, default=50, help='Scale down the prior std when used for initializing the particles. Default is 50.')
     # inference - normflow
     parser.add_argument('--flow-type', type=str, default='Planar', help='Flow type for normflow. Can be Planar, Radial, or NVP. Default is Planar.')
     parser.add_argument('--flow-activation', type=str, default='leaky_relu', help='Activation function of each flow for normflow. Can be tanh or leaky_relu. Default is leaky_relu.')

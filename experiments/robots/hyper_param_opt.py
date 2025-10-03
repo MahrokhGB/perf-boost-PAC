@@ -188,7 +188,12 @@ assert not method is None
 
 now = datetime.now().strftime("%m_%d_%H_%M_%S")
 save_path = os.path.join(BASE_DIR, 'experiments', 'robots', 'saved_results', 'hyper_param_tuning')
-save_folder = os.path.join(save_path, method+'_'+now)
+setup_name ='internal' + str(args.dim_internal)
+if args.nn_type == 'REN':
+    setup_name += '_nl' + str(args.dim_nl)
+elif args.nn_type == 'SSM':
+    setup_name += '_middle' + str(args.dim_middle) + '_scaffolding' + str(args.dim_scaffolding)
+save_folder = os.path.join(save_path, args.nn_type, setup_name, method+'_'+now)
 os.makedirs(save_folder)
 logging.basicConfig(filename=os.path.join(save_folder, 'log'), format='%(asctime)s %(message)s', filemode='w')
 logger = logging.getLogger('perf_boost_')
