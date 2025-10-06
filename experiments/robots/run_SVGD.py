@@ -162,7 +162,7 @@ def train_svgd(args, logger, save_folder):
     svgd_cont = SVGDCont(
         gibbs_posterior=gibbs_posterior,
         num_particles=args.num_particles, logger=logger,
-        optimizer='Adam', lr=args.lr, lr_decay=None, #TODO: add decay
+        optimizer=args.optimizer, lr=args.lr, lr_decay=None, #TODO: add decay
         initial_particles=initial_particles, kernel='RBF', bandwidth=None,
     )
     logger.info('\n[INFO] SVGD: delta: %.2f' % args.delta + ' -- num particles: %2.f' % args.num_particles)

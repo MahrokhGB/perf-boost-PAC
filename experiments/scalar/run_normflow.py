@@ -358,7 +358,14 @@ loss_fig, loss_ax = plt.subplots(1,1,figsize=(10,10))
 loss_ax.set_xlabel('iteration')
 loss_ax.set_ylabel('norm flow loss ('+'annealed)' if annealing else 'not annealed)')
 
-optimizer = torch.optim.Adam(nfm.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+if args.optimizer=='Adam':
+    optimizer = torch.optim.Adam(nfm.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+elif args.optimizer=='SGD':
+    optimizer = torch.optim.SGD(nfm.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+elif args.optimizer=='RMSprop':
+    optimizer = torch.optim.RMSprop(nfm.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+else:
+    raise ValueError("Optimizer not recognized. Choose from 'Adam', 'SGD', or 'RMSprop'.")
 
 with tqdm(range(args.epochs)) as t:
     for it in t:

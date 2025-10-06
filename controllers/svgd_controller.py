@@ -66,8 +66,10 @@ class SVGDCont():
             self.optimizer = torch.optim.Adam([self.particles], lr=lr)
         elif optimizer == 'SGD':
             self.optimizer = torch.optim.SGD([self.particles], lr=lr)
+        elif optimizer == 'RMSprop':
+            self.optimizer = torch.optim.RMSprop([self.particles], lr=lr)
         else:
-            raise NotImplementedError('Optimizer must be Adam or SGD')
+            raise NotImplementedError('Optimizer must be Adam, SGD, or RMSprop')
 
 
     def rollout(self, data):

@@ -119,7 +119,14 @@ original_loss_fn = LQLossFH(Q, R, None, None)
 # ------------ 5. Optimizer ------------
 valid_data = train_data      # use the entire train data for validation
 assert not (valid_data is None and args.return_best)
-optimizer = torch.optim.Adam(ctl_generic.parameters(), lr=args.lr)
+if args.optimizer=='Adam':
+    optimizer = torch.optim.Adam(ctl_generic.parameters(), lr=args.lr)
+elif args.optimizer=='SGD':
+    optimizer = torch.optim.SGD(ctl_generic.parameters(), lr=args.lr)
+elif args.optimizer=='RMSprop':
+    optimizer = torch.optim.RMSprop(ctl_generic.parameters(), lr=args.lr)
+else:
+    raise ValueError("Optimizer not recognized. Choose from 'Adam', 'SGD', or 'RMSprop'.")
 
 # ------------ 6. Training ------------
 with torch.no_grad():

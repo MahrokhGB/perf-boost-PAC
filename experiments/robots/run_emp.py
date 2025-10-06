@@ -125,7 +125,14 @@ def train_emp(args, logger, save_folder):
     )
 
     # ------------ 5. Optimizer ------------
-    optimizer = torch.optim.Adam(ctl_generic.parameters(), lr=args.lr)
+    if args.optimizer == 'Adam':
+        optimizer = torch.optim.Adam(ctl_generic.parameters(), lr=args.lr)
+    elif args.optimizer == 'SGD':
+        optimizer = torch.optim.SGD(ctl_generic.parameters(), lr=args.lr)
+    elif args.optimizer == 'RMSprop':
+        optimizer = torch.optim.RMSprop(ctl_generic.parameters(), lr=args.lr)
+    else:
+        raise ValueError("Optimizer not recognized. Choose from 'Adam', 'SGD', or 'RMSprop'.")
     # queue of validation losses for early stopping
     if args.early_stopping:
         valid_imp_queue = [100]*args.n_logs_no_change   # don't stop at the beginning

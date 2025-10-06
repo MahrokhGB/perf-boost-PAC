@@ -239,7 +239,15 @@ def train_normflow(args, logger, save_folder):
     nfm.to(device)  # Move model on GPU if available
 
     # ------------ 10. Train NormFlows ------------
-    optimizer = torch.optim.Adam(nfm.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    if args.optimizer == 'Adam':
+        optimizer = torch.optim.Adam(nfm.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    elif args.optimizer == 'SGD':
+        optimizer = torch.optim.SGD(nfm.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    elif args.optimizer == 'RMSprop':
+        optimizer = torch.optim.RMSprop(nfm.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    else:
+        raise ValueError("Optimizer not recognized. Choose from 'Adam', 'SGD', or 'RMSprop'.")
+
     res_dict, filename_save = fit_norm_flow(
         nfm=nfm, sys=sys, ctl_generic=ctl_generic, logger=logger, loss_fn=bounded_loss_fn,
         save_folder=save_folder, train_data_full=train_data, test_data=test_data, plot_data=plot_data,

@@ -67,6 +67,7 @@ def argument_parser():
     parser.add_argument('--batch-size', type=int, default=-1, help='Number of forward trajectories of the closed-loop system at each step. Default is num_rollouts if num_rollouts <=256, else 256.')
     parser.add_argument('--epochs', type=int, default=-1, help='Total number of epochs for training. Default is 5000 if collision avoidance, else 100.')
     parser.add_argument('--lr', type=float, default=-1, help='Learning rate. Default is 2e-3 if collision avoidance, else 5e-3.')
+    parser.add_argument('--optimizer', type=str, default='Adam', help='Optimizer. Can be Adam, SGD, or RMSprop. Default is Adam.')
     parser.add_argument('--weight-decay', type=float, default=0, help='Weight decay for Adam optimizer. Default is 0.')
     parser.add_argument('--log-epoch', type=int, default=-1, help='Frequency of logging in epochs. Default is 0.05 * epochs.')
     parser.add_argument('--return-best', type=str2bool, default=True, help='Return the best model on the validation data among all logged iterations. The train data can be used instead of validation data. Default is True.')
@@ -113,6 +114,9 @@ def argument_parser():
 
     args = parser.parse_args()
 
+    # optimizer
+    assert args.optimizer in ['Adam', 'SGD', 'RMSprop'], "Optimizer must be one of 'Adam', 'SGD', or 'RMSprop'."
+    
     # set defaults for REN and SSM parameters based on the type of the operator
     if args.cont_type == 'PerfBoost':
         args = set_ren_ssm_defaults(args)
