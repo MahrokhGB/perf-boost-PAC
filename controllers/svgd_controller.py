@@ -165,7 +165,7 @@ class SVGDCont():
             'log_prob_particles': [0]*(1+epochs),
             'log_prob_prior': [0]*(1+epochs),
             'log_prob_likelihood': [0]*(1+epochs),
-            'lambda x log_prob_likelihood': [0]*(1+epochs)
+            'neg lambda x log_prob_likelihood': [0]*(1+epochs)
         }
         if valid_data is not None:
             valid_loss_hist = []
@@ -184,7 +184,7 @@ class SVGDCont():
                 hist['log_prob_particles'][epoch] += self.svgd.probs['log_prob_particles']
                 hist['log_prob_prior'][epoch] += self.svgd.probs['log_prob_prior']
                 hist['log_prob_likelihood'][epoch] += self.svgd.probs['log_prob_likelihood']
-                hist['lambda x log_prob_likelihood'][epoch] += self.svgd.probs['lambda x log_prob_likelihood']
+                hist['neg lambda x log_prob_likelihood'][epoch] -= self.svgd.probs['lambda x log_prob_likelihood']
 
             # --- print stats ---
             if (epoch % log_period == 0):
@@ -247,12 +247,13 @@ class SVGDCont():
                         ax = axs[0]
                     else:
                         fig, ax = plt.subplots(1, 1, figsize=(5, 5))
-                    ax.plot(-hist['log_prob_particles'][:epoch+1], label='neg log_prob_particles')
-                    ax.plot(-hist['log_prob_prior'][:epoch+1], label='neg log_prob_prior')
-                    ax.plot(hist['lambda x log_prob_likelihood'][:epoch+1], label='lambda x log_prob_likelihood')
+                    ax.plot(hist['log_prob_particles'][:epoch+1], label='log_prob_particles')
+                    ax.plot(hist['log_prob_prior'][:epoch+1], label='log_prob_prior')
+                    ax.plot(hist['neg lambda x log_prob_likelihood'][:epoch+1], label='neglambda x log_prob_likelihood')
                     ax.legend()
                     ax.set_xlabel('Epoch')
-                    ax.set_ylabel('Log probs (log prob particle = log prob prior - lambda x log prob likelihood)')
+                    ax.set_ylabel('Log probs (summed over batches)')
+                    ax.set_title('log prob particle = log prob prior - lambda x log prob likelihood, must increase')
             
                     fig.savefig(os.path.join(save_folder, 'loss.pdf'))
                     plt.close(fig)
