@@ -12,7 +12,7 @@ class SVGD:
         self.optim = optimizer
 
     def phi(self, particles, data):
-        self.probs = None
+        self.probs = {}
         # compute the kernel
         K_XY = self.K(particles, particles.detach())
         # d/d X
