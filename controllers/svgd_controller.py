@@ -167,8 +167,10 @@ class SVGDCont():
             'log_prob_likelihood': [0]*(1+epochs),
             'neg lambda x log_prob_likelihood': [0]*(1+epochs)
         }
-        if valid_data is not None:
-            valid_loss_hist = []
+        loss_hist = {
+            'valid': [],
+            'train': []
+        }
 
         for epoch in range(1+epochs):
             # iterate over all data batches
@@ -201,13 +203,14 @@ class SVGDCont():
                     train_res += self.eval_rollouts(train_data_batch, loss_fn=loss_fn, count_collisions=False) * train_data_batch.shape[0]
                     num_samples += train_data_batch.shape[0]
                 message +=  ', Train Loss: {:2.4f}'.format(train_res/num_samples)
+                loss_hist['train'] += [train_res/num_samples]
 
                 # if validation data is provided  -> compute the valid log-likelihood
                 if valid_data is not None:
                     # evaluate on validation set
                     try:
                         valid_res = self.eval_rollouts(valid_data, loss_fn=loss_fn, count_collisions=False)
-                        valid_loss_hist += [valid_res]
+                        loss_hist['valid'] += [valid_res]
                         message +=  ', Valid Loss: {:2.4f}'.format(valid_res)
                     except Exception as e:
                         message += '[Unhandled ERR] in eval valid rollouts:'
@@ -238,22 +241,23 @@ class SVGDCont():
 
                 # plot loss
                 if not save_folder is None:
+                    fig, axs = plt.subplots(2, 2, figsize=(10, 10))
+                    # plot losses
                     if valid_data is not None:
-                        fig, axs = plt.subplots(1, 2, figsize=(10, 5))
-                        axs[1].scatter([i * log_period for i in range(len(valid_loss_hist))], valid_loss_hist, label='valid loss')
-                        axs[1].legend()
-                        axs[1].set_xlabel('Epoch')
-                        axs[1].set_ylabel('Loss')
-                        ax = axs[0]
-                    else:
-                        fig, ax = plt.subplots(1, 1, figsize=(5, 5))
-                    ax.plot(hist['log_prob_particles'][:epoch+1], label='log_prob_particles')
-                    ax.plot(hist['log_prob_prior'][:epoch+1], label='log_prob_prior')
-                    ax.plot(hist['neg lambda x log_prob_likelihood'][:epoch+1], label='neglambda x log_prob_likelihood')
-                    ax.legend()
-                    ax.set_xlabel('Epoch')
-                    ax.set_ylabel('Log probs (summed over batches)')
-                    ax.set_title('log prob particle = log prob prior - lambda x log prob likelihood, must increase')
+                        axs[0,1].scatter([i * log_period for i in range(len(loss_hist['valid']))], loss_hist['valid'], label='valid')
+                    axs[0,1].scatter([i * log_period for i in range(len(loss_hist['train']))], loss_hist['train'], label='train')
+                    axs[0,1].set_ylabel('Loss')
+                    # plot log probs
+                    axs[0,0].plot(hist['log_prob_particles'][:epoch+1], label='log_prob_particles')
+                    axs[0,0].set_ylabel('Log probs (summed over batches)')
+                    axs[1,0].plot(hist['log_prob_prior'][:epoch+1], label='log_prob_prior')
+                    axs[1,0].set_ylabel('Log probs (summed over batches)')
+                    axs[1,1].plot(hist['neg lambda x log_prob_likelihood'][:epoch+1], label='neglambda x log_prob_likelihood')
+                    axs[1,1].set_ylabel('Log probs (summed over batches)')
+                    for ax in axs.flatten():
+                        ax.set_xlabel('Epoch')
+                        ax.legend()
+                    fig.suptitle('log prob particle = log prob prior - lambda x log prob likelihood, must increase')
             
                     fig.savefig(os.path.join(save_folder, 'loss.pdf'))
                     plt.close(fig)
