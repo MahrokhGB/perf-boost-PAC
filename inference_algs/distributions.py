@@ -50,7 +50,7 @@ class GibbsPosterior():
 
         return loss_val
 
-    def log_prob(self, params, train_data):
+    def log_prob(self, params, train_data, return_all=False):
         '''
         params is of shape (L, -1)
         '''
@@ -68,7 +68,16 @@ class GibbsPosterior():
         NOTE: To debug, remove the effect of the prior by returning -lpl
         '''
         # return -lpl
-        return lpp - self.lambda_ * lpl
+        if not return_all:
+            return lpp - self.lambda_ * lpl
+        else:
+            probs = {
+                'log_prob_prior': lpp,
+                'log_prob_likelihood': lpl,
+                'lambda x log_prob_likelihood': self.lambda_ * lpl,
+                'log_prob_posterior': lpp - self.lambda_ * lpl
+            }
+        return probs
 
     def sample_params_from_prior(self, shape):
         # shape is torch.Size()

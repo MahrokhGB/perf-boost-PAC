@@ -12,22 +12,28 @@ class SVGD:
         self.optim = optimizer
 
     def phi(self, particles, data):
+        self.probs = None
         # compute the kernel
         K_XY = self.K(particles, particles.detach())
         # d/d X
         dX_K_XY = - torch.autograd.grad(K_XY.sum(), particles)[0]
-
         # compute log prob of each particle given the unnormalized dist
         num_particles = particles.shape[0]
         for particle_num in range(num_particles):
-            log_prob_particle = self.target.log_prob(
-                particles[particle_num, :], data
+            probs = self.target.log_prob(
+                particles[particle_num, :], data, return_all=True
             )
             if particle_num == 0:
-                log_prob_particles = log_prob_particle
+                log_prob_particles = probs['log_prob_posterior']
+                self.probs['log_prob_prior'] = probs['log_prob_prior'].detach().item()
+                self.probs['log_prob_likelihood'] = probs['log_prob_likelihood'].detach().item()
+                self.probs['lambda x log_prob_likelihood'] = probs['lambda x log_prob_likelihood'].detach().item()
             else:
-                log_prob_particles += log_prob_particle
-        self.log_prob_particles = log_prob_particles.detach()
+                log_prob_particles += probs['log_prob_posterior']
+                self.probs['log_prob_prior'] += probs['log_prob_prior'].detach().item()
+                self.probs['log_prob_likelihood'] += probs['log_prob_likelihood'].detach().item()
+                self.probs['lambda x log_prob_likelihood'] += probs['lambda x log_prob_likelihood'].detach().item()
+        self.probs['log_prob_particles'] = log_prob_particles.detach().item()
         # d/d_particles ln prob(particles | unnormalized dist)
 
         dX_log_prob_particles = torch.autograd.grad(

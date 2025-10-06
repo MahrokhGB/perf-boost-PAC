@@ -161,7 +161,12 @@ class SVGDCont():
             valid_imp_queue = [100]*n_logs_no_change   # don't stop at the beginning
 
         t = time.time()
-        svgd_loss_hist = [None]*(1+epochs)
+        hist = {
+            'log_prob_particles': [0]*(1+epochs),
+            'log_prob_prior': [0]*(1+epochs),
+            'log_prob_likelihood': [0]*(1+epochs),
+            'lambda x log_prob_likelihood': [0]*(1+epochs)
+        }
         if valid_data is not None:
             valid_loss_hist = []
 
@@ -176,13 +181,16 @@ class SVGDCont():
                 #     self.logger.info('[Unhandled ERR] in SVGD step: ' + type(e).__name__ + '\n')
                 #     self.logger.info(e)
                 #     exit()
-            svgd_loss_hist[epoch]= -self.svgd.log_prob_particles.item() #to('cpu').data.numpy()
+                hist['log_prob_particles'][epoch] += self.svgd.probs['log_prob_particles']
+                hist['log_prob_prior'][epoch] += self.svgd.probs['log_prob_prior']
+                hist['log_prob_likelihood'][epoch] += self.svgd.probs['log_prob_likelihood']
+                hist['lambda x log_prob_likelihood'][epoch] += self.svgd.probs['lambda x log_prob_likelihood']
 
             # --- print stats ---
             if (epoch % log_period == 0):
                 duration = time.time() - t
-                message = 'Epoch %d/%d - Elapsed time %.2f sec - SVGD Loss in epoch %.4f' % (
-                    epoch, epochs, duration, self.svgd.log_prob_particles
+                message = 'Epoch %d/%d - Elapsed time %.2f sec - neg log prob particle in epoch %.4f' % (
+                    epoch, epochs, duration, - hist['log_prob_particles'][epoch]
                 )
 
                 # compute train loss
@@ -239,10 +247,12 @@ class SVGDCont():
                         ax = axs[0]
                     else:
                         fig, ax = plt.subplots(1, 1, figsize=(5, 5))
-                    ax.plot(svgd_loss_hist[:epoch+1], label='SVGD loss')
+                    ax.plot(-hist['log_prob_particles'][:epoch+1], label='neg log_prob_particles')
+                    ax.plot(-hist['log_prob_prior'][:epoch+1], label='neg log_prob_prior')
+                    ax.plot(hist['lambda x log_prob_likelihood'][:epoch+1], label='lambda x log_prob_likelihood')
                     ax.legend()
                     ax.set_xlabel('Epoch')
-                    ax.set_ylabel('Loss')
+                    ax.set_ylabel('Log probs (log prob particle = log prob prior - lambda x log prob likelihood)')
             
                     fig.savefig(os.path.join(save_folder, 'loss.pdf'))
                     plt.close(fig)
